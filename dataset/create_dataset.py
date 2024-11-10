@@ -5,12 +5,28 @@ import tarfile
 
 
 if __name__ == "__main__":
-  script_dir = os.path.dirname(os.path.realpath(__file__))
-  os.chdir(script_dir)
+
+  #step 0 - create workenv
+  create_train_dir = f"mkdir train"
+  create_val_dir = f"mkdir val"
+
+  try:
+      subprocess.run(create_train_dir, check=True, shell=True)
+      print(f"organized files successfully")
+  except subprocess.CalledProcessError as e:
+      print(f"Error: {e}")
+      exit(1)
+  try:
+      subprocess.run(create_val_dir, check=True, shell=True)
+      print(f"organized files successfully")
+  except subprocess.CalledProcessError as e:
+      print(f"Error: {e}")
+      exit(1)
+
   tar_file_path = "ILSVRC2012_img_val.tar"
 
   # Step 1: Change working directory to where the Python file is located
-  script_dir = os.path.dirname(os.path.realpath(__file__))
+  script_dir = os.path.dirname("val/")
   os.chdir(script_dir)
 
   # Step 2: Download the file using wget (Linux command)

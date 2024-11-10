@@ -8,6 +8,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import json
 import wandb
+from model import deit_tiny_patch16_224 as vit_LRP
 
 
 from pathlib import Path
@@ -226,6 +227,10 @@ def main(args):
 
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
+    args.nb_classes = 100
+    print("NEED TO CHANGE: Itamar set distributed as True")
+  
+
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -258,6 +263,8 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=True,
     )
+    print("MADE IT IN BUILDING A TRAINING DATASET")
+
     if args.ThreeAugment:
         data_loader_train.dataset.transform = new_data_aug_generator(args)
 
@@ -268,6 +275,9 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=False
     )
+
+ 
+
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -287,6 +297,11 @@ def main(args):
         drop_block_rate=None,
         img_size=args.input_size
     )
+    print("NEED TO CHANGE: ITAMAR PUT THIS LINE : model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes")
+
+
+   
+
 
                     
     if args.finetune:
@@ -348,12 +363,15 @@ def main(args):
             print('no patch embed')
             
     model.to(device)
+
+    print("MADE IT PASSING MODEL TO DEVICE")
+
  
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     if args.wandb:
         wandb.log({'n_parameters': n_parameters}, commit=False)
  
- 
+    
     model_ema = None
     if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
@@ -394,6 +412,7 @@ def main(args):
     if args.distillation_type != 'none':
         assert args.teacher_path, 'need to specify teacher-path when using distillation'
         print(f"Creating teacher model: {args.teacher_model}")
+        print("NEED TO CHANGE: Itamar put 8 patches here")
         teacher_model = create_model(
             args.teacher_model,
             pretrained=False,
@@ -417,13 +436,14 @@ def main(args):
 
     output_dir = Path(args.output_dir)
     if args.resume:
-        if args.resume.startswith('https'):
+       model = vit_LRP(pretrained=True).cuda()
+       if args.resume.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
                 args.resume, map_location='cpu', check_hash=True)
-        else:
+       else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-        model_without_ddp.load_state_dict(checkpoint['model'])
-        if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+       model_without_ddp.load_state_dict(checkpoint['model'])
+       if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
@@ -431,18 +451,22 @@ def main(args):
                 utils._load_checkpoint_for_ema(model_ema, checkpoint['model_ema'])
             if 'scaler' in checkpoint:
                 loss_scaler.load_state_dict(checkpoint['scaler'])
-        lr_scheduler.step(args.start_epoch)
+       lr_scheduler.step(args.start_epoch)
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
     
+
+
     
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     max_accuracy = 0.0
+
+    #train
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
