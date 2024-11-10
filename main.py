@@ -202,6 +202,8 @@ def main(args):
 
 
     if args.project != '':
+        if args.verbose:
+            print("initiatin wan")
         run_name_with_model = run_name_with_model if not args.name else args.name
         # should_resume = True if args.resume != None and args.resume != '' else False
         wandb.init(project=args.project, name=run_name_with_model, config=args)
@@ -293,23 +295,14 @@ def main(args):
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     print(f"Creating model: {args.model}")
-    #changehere  - you need to create a model based on your file, not timm
-    model = create_model(
-        args.model,
+    model = vit_LRP(
+        
         pretrained=False,
-        num_classes=args.nb_classes, #IMPORTANT - it is 1000 and should be 100 - need to check what it does
-        drop_rate=args.drop, #its cool - was always 0
-        drop_path_rate=args.drop_path, #suuposed to be neglible
-        drop_block_rate=None, #not even mentioned in original
-        img_size=args.input_size #all the same
+  
     )
 
     if args.verbose:
         print("CHANGEHERE: ITAMAR PUT THIS LINE : model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes")
-
-
-   
-
 
                     
     if args.finetune:
@@ -374,7 +367,7 @@ def main(args):
 
   
 
- 
+    
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     if args.wandb:
         wandb.log({'n_parameters': n_parameters}, commit=False)
@@ -444,6 +437,7 @@ def main(args):
 
     output_dir = Path(args.output_dir)
     if args.resume:
+       #changehere - it should work now
        model = vit_LRP(pretrained=True).cuda()
        ''' if args.resume.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
