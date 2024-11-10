@@ -1,7 +1,9 @@
 import os
 import shutil
+import subprocess
 
 def move_directories(source_dir, dest_dir):
+ 
     # List all directories in source_dir, sorted alphabetically
     try:
         directories = [d for d in os.listdir(source_dir) if os.path.isdir(os.path.join(source_dir, d))]
@@ -35,7 +37,7 @@ def move_directories(source_dir, dest_dir):
     print(f"Completed moving {len(directories_to_move)} directories to '{dest_dir}'.")
 
 # Example usage:
-source_directory = '/content/val'
-destination_directory = '/content/tmp'
+source_directory = 'val'
+destination_directory = 'train'
 
 move_directories(source_directory, destination_directory)

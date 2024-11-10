@@ -3,7 +3,7 @@ import os
 from tqdm import tqdm
 import numpy as np
 import argparse
-from dataset.label_index_corrector import *
+#from dataset.label_index_corrector import *
 from helper.json_helper import *
 
 

@@ -27,7 +27,11 @@ if __name__ == "__main__":
 
   # Step 1: Change working directory to where the Python file is located
   script_dir = os.path.dirname("val/")
-  os.chdir(script_dir)
+  try:
+    os.chdir(script_dir)
+  except:
+    exit(1)
+
 
   # Step 2: Download the file using wget (Linux command)
   url = "https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar"

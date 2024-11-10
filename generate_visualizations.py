@@ -6,9 +6,11 @@ import argparse
 
 # Import saliency methods and models
 from baselines.ViT.misc_functions import *
-from dataset.label_index_corrector  import *
+#from dataset.label_index_corrector  import *
 from ViT_explanation_generator import Baselines, LRP
 from model import deit_tiny_patch16_224 as vit_LRP
+from torch.utils.data import DataLoader, Subset
+
 
 from torchvision.datasets import ImageNet
 from torchvision import datasets, transforms
@@ -26,7 +28,7 @@ def normalize(tensor,
 def compute_saliency_and_save(args):
 
     first = True
-    correct_label_dic = convertor_dict()
+    #correct_label_dic = convertor_dict()
 
     with h5py.File(os.path.join(args.method_dir, 'results.hdf5'), 'a') as f:
         data_cam = f.create_dataset('vis',
@@ -45,7 +47,7 @@ def compute_saliency_and_save(args):
                                        dtype=np.int32,
                                        compression="gzip")
         for batch_idx, (data, target) in enumerate(tqdm(sample_loader)):
-            target  = correct_label(target, correct_label_dic )
+          #  target  = correct_label(target, correct_label_dic )
             if first:
                 first = False
                 data_cam.resize(data_cam.shape[0] + data.shape[0] - 1, axis=0)
@@ -203,9 +205,15 @@ if __name__ == "__main__":
     ])
     imagenet_ds =  datasets.ImageFolder(root=args.imagenet_validation_path, transform=transform)
 
+
+
+    subset = Subset(imagenet_ds, np.arange(500))
+
+    #print(subset.indices)
+
     #imagenet_ds = ImageNet(args.imagenet_validation_path, split='val', download=False, transform=transform)
     sample_loader = torch.utils.data.DataLoader(
-        imagenet_ds,
+        subset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=4
