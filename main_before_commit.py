@@ -58,7 +58,6 @@ def get_args_parser():
     parser.add_argument('--bce-loss', action='store_true')
     parser.add_argument('--verbose', action='store_true')
 
-    parser.add_argument('--unscale-lr', action='store_true')
 
     # Model parameters
     parser.add_argument('--model', default='deit_base_patch16_224', type=str, metavar='MODEL',
@@ -523,7 +522,7 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-
+        print(f"epoch: {epoch}")
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
@@ -553,7 +552,7 @@ def main(args):
         if max_accuracy < test_stats["acc1"]:
             max_accuracy = test_stats["acc1"]
             if args.output_dir:
-                checkpoint_paths = [output_dir / f'best_checkpoint_{epoch}.pth']
+                checkpoint_paths = [output_dir / f'best_checkpoint.pth']
                 for checkpoint_path in checkpoint_paths:
                     utils.save_on_master({
                         'model': model_without_ddp.state_dict(),
