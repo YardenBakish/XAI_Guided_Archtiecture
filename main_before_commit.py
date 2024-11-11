@@ -435,7 +435,7 @@ def main(args):
     output_dir = Path(args.output_dir)
     if args.resume:
        #changehere - it should work now
-       model = vit_LRP(pretrained=True).cuda()
+       #model = vit_LRP(pretrained=True).cuda()
        if args.resume.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
                 args.resume, map_location='cpu', check_hash=True)
