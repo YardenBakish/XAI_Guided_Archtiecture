@@ -41,14 +41,14 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             samples = torch.cat((samples,samples),dim=0)
             
         if args.bce_loss:
-            targets = targets.gt(0.0).type(targets.dtype)
+            targets = targets.gt(0.0).type(targets.dtype).float()
          
         with torch.cuda.amp.autocast():
             outputs = model(samples)
             if not args.cosub:
                 loss = criterion(samples, outputs, targets)
             else:
-                outputs = torch.split(outputs, outputs.shape[0]//2, dim=0)
+                #outputs = torch.split(outputs, outputs.shape[0]//2, dim=0)
                 loss = 0.25 * criterion(outputs[0], targets) 
                 loss = loss + 0.25 * criterion(outputs[1], targets) 
                 loss = loss + 0.25 * criterion(outputs[0], outputs[1].detach().sigmoid())
@@ -90,17 +90,19 @@ def evaluate(data_loader, model, device):
     model.eval()
 
     for images, target in metric_logger.log_every(data_loader, 10, header):
-        print(len(images))
+       # print(len(images))
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
-
+        
+        images = images.float().to(device)
+        target = target.long().to(device) 
         # compute output
         with torch.cuda.amp.autocast():
             output = model(images)
-            print(target[0])
-            print(torch.argmax(output[0]))
-            print(target[1])
-            print(torch.argmax(output[1]))
+        #    print(target[0])
+        #    print(torch.argmax(output[0]))
+        #    print(target[1])
+        #    print(torch.argmax(output[1]))
             loss = criterion(output, target)
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))

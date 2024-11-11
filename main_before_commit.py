@@ -9,7 +9,7 @@ import torch.backends.cudnn as cudnn
 import json
 import wandb
 from model_no_hooks import deit_tiny_patch16_224 as vit_LRP
-
+import os
 
 from pathlib import Path
 
@@ -25,7 +25,7 @@ from deit.engine import train_one_epoch, evaluate
 from deit.losses import DistillationLoss
 from deit.samplers import RASampler
 from deit.augment import new_data_aug_generator
-
+from helper.os_helper_functions import is_valid_directory ,create_directory_if_not_exists
 import deit.models as models
 import deit.models_v2 as models_v2
 
@@ -37,6 +37,20 @@ def get_args_parser():
     
     parser.add_argument('--name', default=None, type=str, help='run name')
     parser.add_argument('--project', default='', type=str, help='project name')
+    parser.add_argument('--ablated-component', type=str,
+                        default='none',
+                        choices=['none', 'softmax', 'layerNorm', 'bias',],)
+    
+
+    parser.add_argument('--backup-interval', type=int,
+                        default=20,)
+    
+    parser.add_argument('--results-dir',type=str)
+    parser.add_argument('--auto-resume',action='store_true',)
+    parser.add_argument('--auto-save',action='store_true',)
+
+    
+    parser.add_argument('--unscale-lr', action='store_true')
     
     
     parser.add_argument('--batch-size', default=64, type=int)
@@ -200,6 +214,32 @@ def get_args_parser():
 
 def main(args):
 
+   
+    exp_name      = args.ablated_component
+
+
+    if args.auto_save:
+        results_exp_dir     = f'{args.results_dir}/{exp_name}'
+        create_directory_if_not_exists(f'{args.results_dir}/{exp_name}')
+        args.output_dir     = results_exp_dir
+
+    if args.auto_resume:
+        results_exp_dir     = f'{args.results_dir}/{exp_name}'
+        last_check_point    =  is_valid_directory(results_exp_dir)
+        if last_check_point == False:
+            print("problem with work enviroment")
+            exit(1)
+        else:
+            args.resume     = last_check_point
+            args.finetune   = last_check_point
+    
+    
+         
+    
+
+
+
+
 
     if args.project != '':
         if args.verbose:
@@ -297,7 +337,21 @@ def main(args):
     print(f"Creating model: {args.model}")
     model = vit_LRP(
         pretrained=False,
+        num_classes=args.nb_classes,
     )
+
+    
+    '''model = create_model(
+        args.model,
+        pretrained=False,
+        num_classes=args.nb_classes,
+        drop_rate=args.drop,
+        drop_path_rate=args.drop_path,
+        drop_block_rate=None,
+        img_size=args.input_size,
+    )'''
+    
+    
 
     model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
 
@@ -441,7 +495,7 @@ def main(args):
                 args.resume, map_location='cpu', check_hash=True)
        else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-       model_without_ddp.load_state_dict(checkpoint['model'], strict = False)
+       model_without_ddp.load_state_dict(checkpoint['model'])
        if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
@@ -479,8 +533,8 @@ def main(args):
         )
 
         lr_scheduler.step(epoch)
-        if args.output_dir:
-            checkpoint_paths = [output_dir / 'checkpoint.pth']
+        if args.output_dir and (epoch % args.backup_interval == 0):
+            checkpoint_paths = [output_dir / f'checkpoint_{epoch}.pth']
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
@@ -499,7 +553,7 @@ def main(args):
         if max_accuracy < test_stats["acc1"]:
             max_accuracy = test_stats["acc1"]
             if args.output_dir:
-                checkpoint_paths = [output_dir / 'best_checkpoint.pth']
+                checkpoint_paths = [output_dir / f'best_checkpoint_{epoch}.pth']
                 for checkpoint_path in checkpoint_paths:
                     utils.save_on_master({
                         'model': model_without_ddp.state_dict(),
