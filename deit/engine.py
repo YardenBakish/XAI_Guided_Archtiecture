@@ -99,10 +99,10 @@ def evaluate(data_loader, model, device):
         # compute output
         with torch.cuda.amp.autocast():
             output = model(images)
-        #    print(target[0])
-        #    print(torch.argmax(output[0]))
-        #    print(target[1])
-        #    print(torch.argmax(output[1]))
+            print(target[0])
+            print(torch.argmax(output[0]))
+            print(target[1])
+            print(torch.argmax(output[1]))
             loss = criterion(output, target)
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
