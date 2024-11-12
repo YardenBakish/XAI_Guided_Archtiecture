@@ -522,7 +522,7 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        print(f"epoch: {epoch}")
+        print(f"\n\n epoch: {epoch}\n\n")
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
@@ -532,7 +532,7 @@ def main(args):
         )
 
         lr_scheduler.step(epoch)
-        if args.output_dir and (epoch % args.backup_interval == 0):
+        if args.output_dir:
             checkpoint_paths = [output_dir / f'checkpoint_{epoch}.pth']
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({

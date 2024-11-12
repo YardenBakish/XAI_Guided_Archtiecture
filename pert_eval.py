@@ -5,7 +5,7 @@ import numpy as np
 import argparse
 #from dataset.label_index_corrector import *
 from helper.json_helper import *
-
+from sklearn.metrics import auc
 
 
 from model import deit_tiny_patch16_224 as vit_LRP
@@ -179,17 +179,18 @@ def eval(args):
         model_index += len(target)
         perturb_index += len(target)
         
-    np.save(os.path.join(args.experiment_dir, 'model_hits.npy'), num_correct_model)
-    np.save(os.path.join(args.experiment_dir, 'model_dissimilarities.npy'), dissimilarity_model)
-    np.save(os.path.join(args.experiment_dir, 'perturbations_hits.npy'), num_correct_pertub[:, :perturb_index])
-    np.save(os.path.join(args.experiment_dir, 'perturbations_dissimilarities.npy'), dissimilarity_pertub[:, :perturb_index])
-    np.save(os.path.join(args.experiment_dir, 'perturbations_logit_diff.npy'), logit_diff_pertub[:, :perturb_index])
-    np.save(os.path.join(args.experiment_dir, 'perturbations_prob_diff.npy'), prob_diff_pertub[:, :perturb_index])
+    # np.save(os.path.join(args.experiment_dir, 'model_hits.npy'), num_correct_model)
+    # np.save(os.path.join(args.experiment_dir, 'model_dissimilarities.npy'), dissimilarity_model)
+    # np.save(os.path.join(args.experiment_dir, 'perturbations_hits.npy'), num_correct_pertub[:, :perturb_index])
+    # np.save(os.path.join(args.experiment_dir, 'perturbations_dissimilarities.npy'), dissimilarity_pertub[:, :perturb_index])
+    # np.save(os.path.join(args.experiment_dir, 'perturbations_logit_diff.npy'), logit_diff_pertub[:, :perturb_index])
+    # np.save(os.path.join(args.experiment_dir, 'perturbations_prob_diff.npy'), prob_diff_pertub[:, :perturb_index])
     
     print(correctence_precentage)
     res = calc_basic_mean(correctence_precentage)
-    print(res)
-    update_json("testing/pert_results.json", res)
+    auc_score = auc(perturbation_steps, res[exp_name])
+    print(auc_score)
+    #update_json("testing/pert_results.json", res)
 
    
     #print(np.mean(num_correct_model), np.std(num_correct_model))
