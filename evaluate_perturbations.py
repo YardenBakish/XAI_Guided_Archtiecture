@@ -11,6 +11,9 @@ def parse_args():
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
+    
+    parser.add_argument('--output-dir', type=str,
+                        help='')
     parser.add_argument('--neg', type=bool,default = True)
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
