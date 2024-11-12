@@ -39,11 +39,11 @@ def get_args_parser():
     parser.add_argument('--project', default='', type=str, help='project name')
     parser.add_argument('--ablated-component', type=str,
                         default='none',
-                        choices=['none', 'softmax', 'layerNorm', 'bias',],)
+                        choices=['none', 'softmax', 'layerNorm', 'bias'],)
     
 
     parser.add_argument('--backup-interval', type=int,
-                        default=20,)
+                        default=3,)
     
     parser.add_argument('--results-dir',type=str)
     parser.add_argument('--auto-resume',action='store_true',)
@@ -51,8 +51,6 @@ def get_args_parser():
 
     
     parser.add_argument('--unscale-lr', action='store_true')
-    
-    
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--epochs', default=300, type=int)
     parser.add_argument('--bce-loss', action='store_true')
@@ -177,7 +175,7 @@ def get_args_parser():
     parser.add_argument('--attn-only', action='store_true') 
     
     # Dataset parameters
-    parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    parser.add_argument('--data-path', default='/dataset', type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -213,7 +211,7 @@ def get_args_parser():
 
 def main(args):
 
-   
+   #input argument
     exp_name      = args.ablated_component
 
 
@@ -233,13 +231,6 @@ def main(args):
             args.finetune   = last_check_point
     
     
-         
-    
-
-
-
-
-
     if args.project != '':
         if args.verbose:
             print("initiatin wan")
@@ -249,6 +240,8 @@ def main(args):
         args.wandb = True
     else:
         args.wandb = False
+
+
 
 
     utils.init_distributed_mode(args)
@@ -532,7 +525,7 @@ def main(args):
         )
 
         lr_scheduler.step(epoch)
-        if args.output_dir:
+        if args.output_dir and (epoch %args.backup_interval == 0):
             checkpoint_paths = [output_dir / f'checkpoint_{epoch}.pth']
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
