@@ -11,7 +11,7 @@ from ViT_explanation_generator import Baselines, LRP
 from model import deit_tiny_patch16_224 as vit_LRP
 from torch.utils.data import DataLoader, Subset
 from deit.datasets import build_dataset
-
+import torch
 
 from torchvision.datasets import ImageNet
 from torchvision import datasets, transforms
@@ -48,19 +48,19 @@ def compute_saliency_and_save(args):
                                        dtype=np.int32,
                                        compression="gzip")
         for batch_idx, (data, target) in enumerate(tqdm(sample_loader)):
-         
-          #  target  = correct_label(target, correct_label_dic )
-            print(data.shape)
-            print(target.shape)
+            
+            
+            
+            
             if first:
-                first = False
-                data_cam.resize(data_cam.shape[0] + data.shape[0] - 1, axis=0)
-                data_image.resize(data_image.shape[0] + data.shape[0] - 1, axis=0)
-                data_target.resize(data_target.shape[0] + data.shape[0] - 1, axis=0)
+                 first = False
+                 data_cam.resize(data_cam.shape[0] + data.shape[0] - 1, axis=0)
+                 data_image.resize(data_image.shape[0] + data.shape[0] - 1, axis=0)
+                 data_target.resize(data_target.shape[0] + data.shape[0] - 1, axis=0)
             else:
-                data_cam.resize(data_cam.shape[0] + data.shape[0], axis=0)
-                data_image.resize(data_image.shape[0] + data.shape[0], axis=0)
-                data_target.resize(data_target.shape[0] + data.shape[0], axis=0)
+                 data_cam.resize(data_cam.shape[0] + data.shape[0], axis=0)
+                 data_image.resize(data_image.shape[0] + data.shape[0], axis=0)
+                 data_target.resize(data_target.shape[0] + data.shape[0], axis=0)
 
             # Add data
             data_image[-data.shape[0]:] = data.data.cpu().numpy()
@@ -85,6 +85,10 @@ def compute_saliency_and_save(args):
                 # Res = Res - Res.mean()
 
             elif args.method == 'transformer_attribution':
+                #print(model_LRP(data).shape)
+          
+
+                print("attribution")
                 Res = lrp.generate_LRP(data, start_layer=1, method="grad", index=index).reshape(data.shape[0], 1, 14, 14)
                 # Res = Res - Res.mean()
 
@@ -209,15 +213,16 @@ if __name__ == "__main__":
 
     # LRP
     if args.custom_trained_model != None:
+    
         args.nb_classes = 100
         model_LRP = vit_LRP(
         pretrained=False,
         num_classes=100,
         )
-        #model_LRP.head = torch.nn.Linear(model.head.weight.shape[1],100)
+        #model_LRP.head = torch.nn.Linear(model_LRP.head.weight.shape[1],100)
         checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
 
-        model_LRP.load_state_dict(checkpoint, strict=False)
+        model_LRP.load_state_dict(checkpoint['model'], strict=False)
         model_LRP.to(device)
     else:
         model_LRP = vit_LRP(pretrained=True).cuda()
@@ -238,6 +243,7 @@ if __name__ == "__main__":
     
 
     #print(subset.indices)
+    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     #imagenet_ds = ImageNet(args.imagenet_validation_path, split='val', download=False, transform=transform)
     sample_loader = torch.utils.data.DataLoader(
@@ -246,6 +252,7 @@ if __name__ == "__main__":
         shuffle=False,
         pin_memory=args.pin_mem,
         num_workers=args.num_workers,
+        drop_last = True
 
     )
 

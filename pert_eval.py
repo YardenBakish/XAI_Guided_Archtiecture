@@ -210,9 +210,7 @@ if __name__ == "__main__":
     parser.add_argument('--custom-trained-model', type=str,
                    
                         help='')
-    parser.add_argument('--custom-trained-model', type=str,
-                   
-                        help='')
+    
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--pin-mem', action='store_true',
@@ -307,7 +305,7 @@ if __name__ == "__main__":
         #model_LRP.head = torch.nn.Linear(model.head.weight.shape[1],100)
         checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
 
-        model.load_state_dict(checkpoint, strict=False)
+        model.load_state_dict(checkpoint['model'], strict=False)
         model.to(device)
     else:
         model = vit_LRP(pretrained=True).cuda()
@@ -320,6 +318,7 @@ if __name__ == "__main__":
         imagenet_ds,
         batch_size=args.batch_size,
         num_workers=1,
+        drop_last = False,
         shuffle=False)
 
     eval(args)
