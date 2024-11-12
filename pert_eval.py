@@ -29,7 +29,7 @@ def normalize(tensor,
     return tensor
 
 
-def calc_basic_mean(matt):
+def calc_auc(perturbation_steps,matt):
     means = []
     
     # Iterate through each row of the matrix
@@ -45,8 +45,9 @@ def calc_basic_mean(matt):
             row_mean = np.nan  # or use 0 or some other placeholder if you prefer
         
         means.append(row_mean)
+    auc_score = auc(perturbation_steps, means)
     
-    return {exp_name: means} 
+    return {exp_name: means, f'{exp_name}_auc':{auc_score}} 
 
 def eval(args):
     
@@ -187,10 +188,10 @@ def eval(args):
     # np.save(os.path.join(args.experiment_dir, 'perturbations_prob_diff.npy'), prob_diff_pertub[:, :perturb_index])
     
     print(correctence_precentage)
-    res = calc_basic_mean(correctence_precentage)
-    auc_score = auc(perturbation_steps, res[exp_name])
-    print(auc_score)
-    #update_json("testing/pert_results.json", res)
+    res = calc_auc(perturbation_steps,correctence_precentage)
+ 
+    if args.output_dir:
+        update_json(f"{args.output_dir}/pert_results.json", res)
 
    
     #print(np.mean(num_correct_model), np.std(num_correct_model))
@@ -204,6 +205,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a segmentation')
     parser.add_argument('--batch-size', type=int,
                         default=1,
+                        help='')
+    
+    parser.add_argument('--output-dir', type=str,
+                      
                         help='')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
