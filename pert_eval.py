@@ -205,6 +205,18 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
+    parser.add_argument('--input-size', default=224, type=int, help='images input size')
+    parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
+    parser.add_argument('--custom-trained-model', type=str,
+                   
+                        help='')
+    parser.add_argument('--custom-trained-model', type=str,
+                   
+                        help='')
+    parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
+                        type=str, help='Image Net dataset path')
+    parser.add_argument('--pin-mem', action='store_true',
+                        help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.', default=True)
     parser.add_argument('--neg', type=bool,
                         default=True,
                         help='')
@@ -285,7 +297,21 @@ if __name__ == "__main__":
 
 
     # Model
-    model = vit_LRP(pretrained=True).cuda()
+
+    if args.custom_trained_model != None:
+        args.nb_classes = 100
+        model = vit_LRP(
+        pretrained=False,
+        num_classes=100,
+        )
+        #model_LRP.head = torch.nn.Linear(model.head.weight.shape[1],100)
+        checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
+
+        model.load_state_dict(checkpoint, strict=False)
+        model.to(device)
+    else:
+        model = vit_LRP(pretrained=True).cuda()
+  
     model.eval()
 
     save_path = PATH + 'results/'

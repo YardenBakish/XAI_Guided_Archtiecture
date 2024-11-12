@@ -10,6 +10,7 @@ from baselines.ViT.misc_functions import *
 from ViT_explanation_generator import Baselines, LRP
 from model import deit_tiny_patch16_224 as vit_LRP
 from torch.utils.data import DataLoader, Subset
+from deit.datasets import build_dataset
 
 
 from torchvision.datasets import ImageNet
@@ -47,7 +48,10 @@ def compute_saliency_and_save(args):
                                        dtype=np.int32,
                                        compression="gzip")
         for batch_idx, (data, target) in enumerate(tqdm(sample_loader)):
+         
           #  target  = correct_label(target, correct_label_dic )
+            print(data.shape)
+            print(target.shape)
             if first:
                 first = False
                 data_cam.resize(data_cam.shape[0] + data.shape[0] - 1, axis=0)
@@ -114,11 +118,26 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
+    parser.add_argument('--input-size', default=224, type=int, help='images input size')
+    parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
+    
+
+    parser.add_argument('--custom-trained-model', type=str,
+                   
+                        help='')
+    parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
+                        type=str, help='Image Net dataset path')
+    parser.add_argument('--num-workers', type=int,
+                        default= 2,
+                        help='')
     parser.add_argument('--method', type=str,
                         default='grad_rollout',
                         choices=['rollout', 'lrp', 'transformer_attribution', 'full_lrp', 'lrp_last_layer',
                                  'attn_last_layer', 'attn_gradcam'],
                         help='')
+
+    parser.add_argument('--pin-mem', action='store_true',
+                        help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.', default=True)
     parser.add_argument('--lmd', type=float,
                         default=10,
                         help='')
@@ -150,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument('--is-ablation', type=bool,
                         default=False,
                         help='')
-    parser.add_argument('--imagenet-validation-path', type=str,
+    parser.add_argument('--data-path', type=str,
                         required=True,
                         help='')
     args = parser.parse_args()
@@ -189,7 +208,19 @@ if __name__ == "__main__":
     baselines = Baselines(model)
 
     # LRP
-    model_LRP = vit_LRP(pretrained=True).cuda()
+    if args.custom_trained_model != None:
+        args.nb_classes = 100
+        model_LRP = vit_LRP(
+        pretrained=False,
+        num_classes=100,
+        )
+        #model_LRP.head = torch.nn.Linear(model.head.weight.shape[1],100)
+        checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
+
+        model_LRP.load_state_dict(checkpoint, strict=False)
+        model_LRP.to(device)
+    else:
+        model_LRP = vit_LRP(pretrained=True).cuda()
     model_LRP.eval()
     lrp = LRP(model_LRP)
 
@@ -203,20 +234,19 @@ if __name__ == "__main__":
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
     ])
-    imagenet_ds =  datasets.ImageFolder(root=args.imagenet_validation_path, transform=transform)
-
-
-
-    subset = Subset(imagenet_ds, np.arange(500))
+    dataset_val, _ = build_dataset(is_train=False, args=args)
+    
 
     #print(subset.indices)
 
     #imagenet_ds = ImageNet(args.imagenet_validation_path, split='val', download=False, transform=transform)
     sample_loader = torch.utils.data.DataLoader(
-        subset,
+        dataset_val,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4
+        pin_memory=args.pin_mem,
+        num_workers=args.num_workers,
+
     )
 
     compute_saliency_and_save(args)
