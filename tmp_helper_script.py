@@ -2,6 +2,10 @@ import os
 import shutil
 import subprocess
 
+#helps to control a subset of the dataset for sanity checks
+# TODO:delete this file when no longer needed 
+
+
 def move_directories(source_dir, dest_dir):
  
     # List all directories in source_dir, sorted alphabetically

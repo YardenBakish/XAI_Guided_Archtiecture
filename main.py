@@ -25,7 +25,7 @@ from deit.engine import train_one_epoch, evaluate
 from deit.losses import DistillationLoss
 from deit.samplers import RASampler
 from deit.augment import new_data_aug_generator
-from helper.os_helper_functions import is_valid_directory ,create_directory_if_not_exists
+from misc.helper_functions import is_valid_directory ,create_directory_if_not_exists
 import deit.models as models
 import deit.models_v2 as models_v2
 

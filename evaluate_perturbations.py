@@ -86,20 +86,20 @@ def parse_args():
 if __name__ == "__main__":
     args                   = parse_args()
     run_gen_vis_cmd        = "CUDA_VISIBLE_DEVICES=0 PYTHONPATH=./:$PYTHONPATH python3 generate_visualizations.py"
-    run_pert_eval_cmd      = "CUDA_VISIBLE_DEVICES=0 PYTHONPATH=./:$PYTHONPATH python3 pert_eval.py"
+    run_gen_pert_cmd       = "CUDA_VISIBLE_DEVICES=0 PYTHONPATH=./:$PYTHONPATH python3 generate_perturbations.py"
     
     run_gen_vis_cmd       +=  f' --method {args.method}'
-    run_pert_eval_cmd     +=  f' --method {args.method}'
+    run_gen_pert_cmd     +=  f' --method {args.method}'
  
     run_gen_vis_cmd       +=  f' --data-path {args.data_path}'
     run_gen_vis_cmd       +=  f' --batch-size {args.batch_size}'
     run_gen_vis_cmd       +=  f' --num-workers {args.num_workers}'
     if args.custom_trained_model:
         run_gen_vis_cmd   +=  f' --custom-trained-model {args.custom_trained_model}'
-        run_pert_eval_cmd +=  f' --custom-trained-model {args.custom_trained_model}'
+        run_gen_pert_cmd +=  f' --custom-trained-model {args.custom_trained_model}'
 
     if args.output_dir:
-        run_pert_eval_cmd +=  f' --output-dir {args.output_dir}'
+        run_gen_pert_cmd +=  f' --output-dir {args.output_dir}'
        
     if args.pass_vis == None:
       try:
@@ -110,17 +110,17 @@ if __name__ == "__main__":
         exit(1)
     
     run_twice              = False
-    run_pert_eval_cmd_opp = None
+    run_gen_pert_cmd_opp = None
     if args.both:
         run_twice == True
-        run_pert_eval_cmd_opp = run_pert_eval_cmd +  f' --neg {1-(args.neg)}'
+        run_gen_pert_cmd_opp = run_gen_pert_cmd +  f' --neg {1-(args.neg)}'
 
     else:
-        run_pert_eval_cmd +=  f' --neg {args.neg}'
+        run_gen_pert_cmd +=  f' --neg {args.neg}'
        
        
     try:
-      subprocess.run(run_pert_eval_cmd, check=True, shell=True)
+      subprocess.run(run_gen_pert_cmd, check=True, shell=True)
       print(f"generated visualizations")
     except subprocess.CalledProcessError as e:
       print(f"Error: {e}")
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     
     if run_twice:
         try:
-          subprocess.run(run_pert_eval_cmd_opp, check=True, shell=True)
+          subprocess.run(run_gen_pert_cmd_opp, check=True, shell=True)
           print(f"generated visualizations")
         except subprocess.CalledProcessError as e:
           print(f"Error: {e}")

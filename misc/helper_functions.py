@@ -1,6 +1,6 @@
 import os
 import re
-
+import json
 
 def get_file_with_largest_number(directory):
     largest_number = -1
@@ -48,3 +48,26 @@ def is_valid_directory(directory):
     else:
         print("Directory does not exist.")
         return False
+    
+
+
+
+def load_json(filename):
+    """Load JSON file as a dictionary."""
+    try:
+        with open(filename, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_json(filename, data):
+    """Save dictionary to JSON file."""
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=4)
+
+def update_json(filename, new_dict):
+    """Update or add a key-value pair to the JSON file."""
+    data = load_json(filename)
+    data.update(new_dict)
+    print(data)
+    save_json(filename, data)

@@ -4,7 +4,7 @@ from tqdm import tqdm
 import numpy as np
 import argparse
 #from dataset.label_index_corrector import *
-from helper.json_helper import *
+from misc.helper_functions import *
 from sklearn.metrics import auc
 
 
