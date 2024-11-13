@@ -8,13 +8,15 @@ import subprocess
 
 def parse_args():
     parser = argparse.ArgumentParser(description='evaluate perturbations')
+    parser.add_argument('--pass-vis', action='store_true')
+    
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
     
     parser.add_argument('--output-dir', type=str,
                         help='')
-    parser.add_argument('--neg', type=bool,default = True)
+    parser.add_argument('--neg', type=int, choices = [0,1], default = 0)
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
     parser.add_argument('--custom-trained-model', type=str,help='')
@@ -28,7 +30,7 @@ def parse_args():
                         choices=['rollout', 'lrp', 'transformer_attribution', 'full_lrp', 'lrp_last_layer',
                                  'attn_last_layer', 'attn_gradcam'],
                         help='')
-    
+
     parser.add_argument('--both',  action='store_true',)
     parser.add_argument('--debug',
                         action='store_true',
@@ -86,31 +88,35 @@ if __name__ == "__main__":
     run_gen_vis_cmd        = "CUDA_VISIBLE_DEVICES=0 PYTHONPATH=./:$PYTHONPATH python3 generate_visualizations.py"
     run_pert_eval_cmd      = "CUDA_VISIBLE_DEVICES=0 PYTHONPATH=./:$PYTHONPATH python3 pert_eval.py"
     
-    run_gen_vis_cmd       += f'--method {args.method}'
-    run_pert_eval_cmd     += f'--method {args.method}'
-
-    run_gen_vis_cmd       +=  f'--data-path {args.data_path}'
-    run_gen_vis_cmd       +=  f'--batch-size {args.batch_size}'
-    run_gen_vis_cmd       +=  f'--num-workers {args.num_workers}'
+    run_gen_vis_cmd       +=  f' --method {args.method}'
+    run_pert_eval_cmd     +=  f' --method {args.method}'
+ 
+    run_gen_vis_cmd       +=  f' --data-path {args.data_path}'
+    run_gen_vis_cmd       +=  f' --batch-size {args.batch_size}'
+    run_gen_vis_cmd       +=  f' --num-workers {args.num_workers}'
     if args.custom_trained_model:
-        run_gen_vis_cmd   +=  f'--custom-trained-model {args.custom_trained_model}'
-        run_pert_eval_cmd +=  f'--custom-trained-model {args.custom_trained_model}'
+        run_gen_vis_cmd   +=  f' --custom-trained-model {args.custom_trained_model}'
+        run_pert_eval_cmd +=  f' --custom-trained-model {args.custom_trained_model}'
 
-    try:
-      subprocess.run(run_gen_vis_cmd, check=True, shell=True)
-      print(f"generated visualizations")
-    except subprocess.CalledProcessError as e:
-      print(f"Error: {e}")
-      exit(1)
+    if args.output_dir:
+        run_pert_eval_cmd +=  f' --output-dir {args.output_dir}'
+       
+    if args.pass_vis == None:
+      try:
+        subprocess.run(run_gen_vis_cmd, check=True, shell=True)
+        print(f"generated visualizations")
+      except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
+        exit(1)
     
     run_twice              = False
     run_pert_eval_cmd_opp = None
     if args.both:
         run_twice == True
-        run_pert_eval_cmd_opp = run_pert_eval_cmd +  f'--neg {1-(args.neg)}'
+        run_pert_eval_cmd_opp = run_pert_eval_cmd +  f' --neg {1-(args.neg)}'
 
     else:
-        run_pert_eval_cmd +=  f'--neg {args.neg}'
+        run_pert_eval_cmd +=  f' --neg {args.neg}'
        
        
     try:

@@ -47,7 +47,7 @@ def calc_auc(perturbation_steps,matt):
         means.append(row_mean)
     auc_score = auc(perturbation_steps, means)
     
-    return {exp_name: means, f'{exp_name}_auc':{auc_score}} 
+    return {exp_name: means, f'{exp_name}_auc':auc_score} 
 
 def eval(args):
     
@@ -208,7 +208,6 @@ if __name__ == "__main__":
                         help='')
     
     parser.add_argument('--output-dir', type=str,
-                      
                         help='')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
@@ -220,9 +219,7 @@ if __name__ == "__main__":
                         type=str, help='Image Net dataset path')
     parser.add_argument('--pin-mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.', default=True)
-    parser.add_argument('--neg', type=bool,
-                        default=True,
-                        help='')
+    parser.add_argument('--neg', type=int, choices = [0,1], default = 0)
     parser.add_argument('--debug', 
                     
                         action='store_true',

@@ -330,6 +330,7 @@ def main(args):
     model = vit_LRP(
         pretrained=False,
         num_classes=args.nb_classes,
+        ablated_component= args.ablated_component
     )
 
     
@@ -361,6 +362,15 @@ def main(args):
             if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]
+
+        
+        if args.ablated_component == "bias":
+            for key in checkpoint_model.copy():
+                if "bias" in key:
+                    if key not in state_dict:
+                        print(f" removing {key} from pretrained checkpoint")
+                        del checkpoint_model[key]
+              
 
         # interpolate position embedding
         pos_embed_checkpoint = checkpoint_model['pos_embed']
@@ -487,6 +497,10 @@ def main(args):
                 args.resume, map_location='cpu', check_hash=True)
        else:
             checkpoint = torch.load(args.resume, map_location='cpu')
+       
+
+       
+       
        model_without_ddp.load_state_dict(checkpoint['model'])
        if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
