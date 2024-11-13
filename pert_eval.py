@@ -8,7 +8,7 @@ from helper.json_helper import *
 from sklearn.metrics import auc
 
 
-from model import deit_tiny_patch16_224 as vit_LRP
+from model_ablation import deit_tiny_patch16_224 as vit_LRP
 
 import glob
 

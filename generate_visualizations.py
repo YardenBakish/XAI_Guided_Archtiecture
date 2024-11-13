@@ -8,7 +8,7 @@ import argparse
 from baselines.ViT.misc_functions import *
 #from dataset.label_index_corrector  import *
 from ViT_explanation_generator import Baselines, LRP
-from model import deit_tiny_patch16_224 as vit_LRP
+from model_ablation import deit_tiny_patch16_224 as vit_LRP
 from torch.utils.data import DataLoader, Subset
 from deit.datasets import build_dataset
 import torch

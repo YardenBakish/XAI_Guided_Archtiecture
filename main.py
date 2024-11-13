@@ -8,7 +8,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import json
 import wandb
-from model_no_hooks import deit_tiny_patch16_224 as vit_LRP
+from model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP
 import os
 
 from pathlib import Path
