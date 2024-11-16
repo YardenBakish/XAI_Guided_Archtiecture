@@ -9,6 +9,8 @@ import torch.backends.cudnn as cudnn
 import json
 import wandb
 from model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP
+from models.model_wrapper import model_env 
+
 import os
 
 from pathlib import Path
@@ -339,11 +341,17 @@ def main(args):
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     print(f"Creating model: {args.model}")
-    model = vit_LRP(
+    '''model = vit_LRP(
         pretrained=False,
         num_classes=args.nb_classes,
         ablated_component= args.ablated_component
-    )
+    )'''
+
+    model = model_env(pretrained=False, 
+                      nb_classes=args.nb_classes,  
+                      ablated_component= args.ablated_component,
+                      variant = args.variant
+                      )
 
     
     '''model = create_model(

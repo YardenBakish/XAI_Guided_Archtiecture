@@ -242,6 +242,11 @@ if __name__ == "__main__":
     dataset_val, _ = build_dataset(is_train=False, args=args)
     
 
+    total_size  = len(dataset_val)
+    subset_size = int(total_size * 0.2)
+    indices     = list(range(subset_size))
+    dataset_val = Subset(dataset_val, indices)
+
     #print(subset.indices)
     sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 

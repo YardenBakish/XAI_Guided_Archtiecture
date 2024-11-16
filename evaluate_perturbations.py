@@ -15,8 +15,7 @@ def parse_args():
                         help='')
     
     parser.add_argument('--ablated-component', type=str,
-                        default='none',
-                        choices=['none', 'softmax', 'layerNorm', 'bias'],)
+                        choices=['softmax', 'layerNorm', 'bias'],)
     
     
     parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
@@ -115,10 +114,10 @@ if __name__ == "__main__":
        exit(1)
     elif args.variant:
        args.output_dir   = f'finetuned_models/{args.variant}'
-       args.custom_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
-    elif args.ablated_component:
+       args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
+    elif args.ablated_component :
        args.output_dir   = f'finetuned_models/no_{args.ablated_component}'
-       args.custom_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
+       args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
     else:
       pass
 
