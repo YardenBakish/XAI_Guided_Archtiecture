@@ -14,6 +14,13 @@ def parse_args():
                         default=1,
                         help='')
     
+    parser.add_argument('--ablated-component', type=str,
+                        default='none',
+                        choices=['none', 'softmax', 'layerNorm', 'bias'],)
+    
+    
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
+    
     parser.add_argument('--output-dir', type=str,
                         help='')
     parser.add_argument('--neg', type=int, choices = [0,1], default = 0)
@@ -31,7 +38,7 @@ def parse_args():
                                  'attn_last_layer', 'attn_gradcam'],
                         help='')
 
-    parser.add_argument('--both',  action='store_true',)
+    parser.add_argument('--both',  action='store_true')
     parser.add_argument('--debug',
                         action='store_true',
                         help='Runs the first 5 samples and visualizes ommited pixels')
@@ -85,15 +92,37 @@ def parse_args():
 
 if __name__ == "__main__":
     args                   = parse_args()
-    run_gen_vis_cmd        = "CUDA_VISIBLE_DEVICES=0 PYTHONPATH=./:$PYTHONPATH python3 generate_visualizations.py"
-    run_gen_pert_cmd       = "CUDA_VISIBLE_DEVICES=0 PYTHONPATH=./:$PYTHONPATH python3 generate_perturbations.py"
+    run_gen_vis_cmd        = "python generate_visualizations.py"
+    run_gen_pert_cmd       = "python generate_perturbations.py"
     
     run_gen_vis_cmd       +=  f' --method {args.method}'
-    run_gen_pert_cmd     +=  f' --method {args.method}'
+    run_gen_pert_cmd      +=  f' --method {args.method}'
  
     run_gen_vis_cmd       +=  f' --data-path {args.data_path}'
     run_gen_vis_cmd       +=  f' --batch-size {args.batch_size}'
     run_gen_vis_cmd       +=  f' --num-workers {args.num_workers}'
+    
+    
+    
+    
+    if args.ablated_component and args.variant:
+      print("does not support both a variant and ablation")
+      exit(1)
+    
+    
+    if args.ablated_component == None and args.variant == None and args.custom_trained_model == None:
+       print("have to specify a specific model, a variant, or ablation")
+       exit(1)
+    elif args.variant:
+       args.output_dir   = f'finetuned_models/{args.variant}'
+       args.custom_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
+    elif args.ablated_component:
+       args.output_dir   = f'finetuned_models/no_{args.ablated_component}'
+       args.custom_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
+    else:
+      pass
+
+    
     if args.custom_trained_model:
         run_gen_vis_cmd   +=  f' --custom-trained-model {args.custom_trained_model}'
         run_gen_pert_cmd +=  f' --custom-trained-model {args.custom_trained_model}'
@@ -101,7 +130,7 @@ if __name__ == "__main__":
     if args.output_dir:
         run_gen_pert_cmd +=  f' --output-dir {args.output_dir}'
        
-    if args.pass_vis == None:
+    if args.pass_vis == False:
       try:
         subprocess.run(run_gen_vis_cmd, check=True, shell=True)
         print(f"generated visualizations")
@@ -112,7 +141,7 @@ if __name__ == "__main__":
     run_twice              = False
     run_gen_pert_cmd_opp = None
     if args.both:
-        run_twice == True
+        run_twice = True
         run_gen_pert_cmd_opp = run_gen_pert_cmd +  f' --neg {1-(args.neg)}'
 
     else:
@@ -126,6 +155,7 @@ if __name__ == "__main__":
       print(f"Error: {e}")
       exit(1)
     
+    print("starting again")
     if run_twice:
         try:
           subprocess.run(run_gen_pert_cmd_opp, check=True, shell=True)

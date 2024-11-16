@@ -25,7 +25,7 @@ from deit.engine import train_one_epoch, evaluate
 from deit.losses import DistillationLoss
 from deit.samplers import RASampler
 from deit.augment import new_data_aug_generator
-from misc.helper_functions import is_valid_directory ,create_directory_if_not_exists
+from misc.helper_functions import is_valid_directory ,create_directory_if_not_exists, update_json
 import deit.models as models
 import deit.models_v2 as models_v2
 
@@ -43,11 +43,15 @@ def get_args_parser():
     
 
     parser.add_argument('--backup-interval', type=int,
-                        default=3,)
+                        default=2,)
     
     parser.add_argument('--results-dir',type=str)
     parser.add_argument('--auto-resume',action='store_true',)
     parser.add_argument('--auto-save',action='store_true',)
+    parser.add_argument('--is-ablation',action='store_true',)
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
+
+
 
     
     parser.add_argument('--unscale-lr', action='store_true')
@@ -212,7 +216,16 @@ def get_args_parser():
 def main(args):
 
    #input argument
+
+    if args.is_ablation and args.variant:
+        print("does not support both a variant and ablation")
+        exit(1)
+
     exp_name      = args.ablated_component
+    if args.variant:
+        exp_name = args.variant
+    if args.is_ablation:
+        exp_name = "no_"+exp_name
 
 
     if args.auto_save:
@@ -243,9 +256,9 @@ def main(args):
 
 
 
-
-    utils.init_distributed_mode(args)
-
+    print("changehere")
+    #utils.init_distributed_mode(args)
+    args.distributed = False
     print(args)
 
     if args.distillation_type != 'none' and args.finetune and not args.eval:
@@ -260,7 +273,6 @@ def main(args):
     # random.seed(seed)
 
     cudnn.benchmark = True
-
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
     args.nb_classes = 100
@@ -513,6 +525,8 @@ def main(args):
        lr_scheduler.step(args.start_epoch)
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
+        update_json(f'{args.output_dir}/last_acc_results.json', {f"1_acc": f"* Acc@1 {test_stats['acc1']:.1f} Acc@5 {test_stats['acc5']:.1f} loss {test_stats['loss']:.1f}"})
+
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
     
@@ -537,9 +551,10 @@ def main(args):
             set_training_mode=args.train_mode,  # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
             args = args,
         )
+        print("managed to finsh training")
 
         lr_scheduler.step(epoch)
-        if args.output_dir and (epoch %args.backup_interval == 0):
+        if args.output_dir: #and (epoch %args.backup_interval == 0):
             checkpoint_paths = [output_dir / f'checkpoint_{epoch}.pth']
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
@@ -554,8 +569,10 @@ def main(args):
              
 
         test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-        
+        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']}%")
+        update_json(f'{args.output_dir}/acc_results.json', {f"{epoch}_acc": f"* Acc@1 {test_stats['acc1']:.1f} Acc@5 {test_stats['acc5']:.1f} loss {test_stats['loss']:.1f}"})
+
+
         if max_accuracy < test_stats["acc1"]:
             max_accuracy = test_stats["acc1"]
             if args.output_dir:
@@ -570,8 +587,9 @@ def main(args):
                         'scaler': loss_scaler.state_dict(),
                         'args': args,
                     }, checkpoint_path)
+            update_json(f'{args.output_dir}/acc_results.json', {f'best': f'{max_accuracy:.2f}'})
             
-        print(f'Max accuracy: {max_accuracy:.2f}%')
+        print(f'Max accuracy: {max_accuracy:.2f}')
 
         if args.wandb:
             # Log best accuracy
@@ -595,8 +613,11 @@ def main(args):
 
 
 if __name__ == '__main__':
+  
     parser = argparse.ArgumentParser('DeiT training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    
+    
     main(args)

@@ -82,7 +82,7 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
         self.scale = head_dim ** -0.5
-        print(f"inside attention, ablated component: {ablated_component}")
+        #print(f"inside attention, ablated component: {ablated_component}")
         if ablated_component == "bias":
             print(f"is qkv_bias False: {qkv_bias}")
 
@@ -186,7 +186,7 @@ class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0., ablated_component=""):
         super().__init__()
-        print(f"inside a block, ablated component: {ablated_component}")
+      #  print(f"inside a block, ablated component: {ablated_component}")
         if ablated_component == "bias":
             print(f"qkv_bias is : {qkv_bias}")
         self.norm1 = LayerNorm(dim, eps=1e-6) if ablated_component != "layerNorm" else None
@@ -317,7 +317,6 @@ class VisionTransformer(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    print("CHANGEHERE - WAS under property at first")
     @torch.jit.ignore
     def no_weight_decay(self):
         return {'pos_embed', 'cls_token'}

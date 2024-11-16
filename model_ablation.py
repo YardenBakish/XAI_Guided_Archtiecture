@@ -82,7 +82,7 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
         self.scale = head_dim ** -0.5
-        print(f"inside attention, ablated component: {ablated_component}")
+        #print(f"inside attention, ablated component: {ablated_component}")
         if ablated_component == "bias":
             print(f"is qkv_bias False: {qkv_bias}")
 
@@ -186,7 +186,7 @@ class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0., ablated_component=""):
         super().__init__()
-        print(f"inside a block, ablated component: {ablated_component}")
+        #print(f"inside a block, ablated component: {ablated_component}")
         if ablated_component == "bias":
             print(f"qkv_bias is : {qkv_bias}")
         self.norm1 = LayerNorm(dim, eps=1e-6) if ablated_component != "layerNorm" else None
@@ -266,7 +266,7 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, mlp_head=False, drop_rate=0., attn_drop_rate=0., ablated_component = ""):
         super().__init__()
-        print(f"ablated component: {ablated_component}")
+        #print(f"ablated component: {ablated_component}")
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.patch_embed = PatchEmbed(
