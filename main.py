@@ -220,6 +220,7 @@ def main(args):
    #input argument
 
     if args.is_ablation and args.variant:
+        print(args.variant)
         print("does not support both a variant and ablation")
         exit(1)
 
@@ -239,7 +240,7 @@ def main(args):
         results_exp_dir     = f'{args.results_dir}/{exp_name}'
         last_check_point    =  is_valid_directory(results_exp_dir)
         if last_check_point == False:
-            print("problem with work enviroment")
+            print(f"problem with work enviroment {results_exp_dir}")
             exit(1)
         else:
             args.resume     = last_check_point
@@ -405,6 +406,15 @@ def main(args):
         extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
         # only the position tokens are interpolated
         pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
+        
+        print(pos_embed_checkpoint.shape)
+        print("\n\n")
+        print(pos_tokens.shape)
+        print("\n\n")
+        print(orig_size.shape)
+        print("\n\n")
+        print(embedding_size.shape)
+
         pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
         pos_tokens = torch.nn.functional.interpolate(
             pos_tokens, size=(new_size, new_size), mode='bicubic', align_corners=False)
@@ -533,7 +543,7 @@ def main(args):
        lr_scheduler.step(args.start_epoch)
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
-        update_json(f'{args.output_dir}/last_acc_results.json', {f"1_acc": f"* Acc@1 {test_stats['acc1']:.1f} Acc@5 {test_stats['acc5']:.1f} loss {test_stats['loss']:.1f}"})
+        #update_json(f'{args.output_dir}/last_acc_results.json', {f"1_acc": f"* Acc@1 {test_stats['acc1']:.1f} Acc@5 {test_stats['acc5']:.1f} loss {test_stats['loss']:.1f}"})
 
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return

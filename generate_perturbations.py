@@ -9,6 +9,7 @@ from sklearn.metrics import auc
 
 
 from model_ablation import deit_tiny_patch16_224 as vit_LRP
+from models.model_wrapper import model_env 
 
 import glob
 
@@ -215,6 +216,12 @@ if __name__ == "__main__":
                    
                         help='')
     
+    parser.add_argument('--ablated-component', type=str,
+                        choices=['softmax', 'layerNorm', 'bias'],)
+    
+    
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
+    
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--pin-mem', action='store_true',
@@ -300,10 +307,12 @@ if __name__ == "__main__":
 
     if args.custom_trained_model != None:
         args.nb_classes = 100
-        model = vit_LRP(
-        pretrained=False,
-        num_classes=100,
-        )
+        model = model_env(pretrained=False, 
+                      nb_classes=100,  
+                      ablated_component= args.ablated_component,
+                      variant = args.variant,
+                      hooks = True,
+                    )
         #model_LRP.head = torch.nn.Linear(model.head.weight.shape[1],100)
         checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
 

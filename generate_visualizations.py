@@ -9,6 +9,8 @@ from baselines.ViT.misc_functions import *
 #from dataset.label_index_corrector  import *
 from ViT_explanation_generator import Baselines, LRP
 from model_ablation import deit_tiny_patch16_224 as vit_LRP
+from models.model_wrapper import model_env 
+
 from torch.utils.data import DataLoader, Subset
 from deit.datasets import build_dataset
 import torch
@@ -124,7 +126,11 @@ if __name__ == "__main__":
                         help='')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
+    parser.add_argument('--ablated-component', type=str,
+                        choices=['softmax', 'layerNorm', 'bias'],)
     
+    
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
 
     parser.add_argument('--custom-trained-model', type=str,
                    
@@ -215,10 +221,12 @@ if __name__ == "__main__":
     if args.custom_trained_model != None:
     
         args.nb_classes = 100
-        model_LRP = vit_LRP(
-        pretrained=False,
-        num_classes=100,
-        )
+        model_LRP = model_env(pretrained=False, 
+                      nb_classes=100,  
+                      ablated_component= args.ablated_component,
+                      variant = args.variant,
+                      hooks = True,
+                    )
         #model_LRP.head = torch.nn.Linear(model_LRP.head.weight.shape[1],100)
         checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
 
@@ -243,7 +251,7 @@ if __name__ == "__main__":
     
 
     total_size  = len(dataset_val)
-    subset_size = int(total_size * 0.2)
+    subset_size = int(total_size * 0.1)
     indices     = list(range(subset_size))
     dataset_val = Subset(dataset_val, indices)
 

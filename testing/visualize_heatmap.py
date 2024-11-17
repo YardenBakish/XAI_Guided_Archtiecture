@@ -1,4 +1,5 @@
-from model import deit_tiny_patch16_224 as vit_LRP
+from models.model_wrapper import model_env 
+
 from ViT_explanation_generator import LRP
 import torchvision.transforms as transforms
 import argparse
@@ -17,10 +18,7 @@ transform = transforms.Compose([
 ])
 
 
-# initialize ViT pretrained with DeiT
-model = vit_LRP(pretrained=True).cuda()
-model.eval()
-attribution_generator = LRP(model)
+
 
 
 # create heatmap from mask on image
@@ -93,9 +91,14 @@ if __name__ == "__main__":
                         help='')
 
 
-
+  parser.add_argument('--ablated-component', type=str, 
+                        choices=['none','softmax', 'layerNorm', 'bias'],)
+    
+    
+  parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
   parser.add_argument('--class-index', 
-                        default = "243",
+                       # default = "243",
+                       type=int,
                         help='') #243 - dog , 282 - cat
   parser.add_argument('--method', type=str,
                         default='transformer_attribution',
@@ -108,6 +111,31 @@ if __name__ == "__main__":
   image = Image.open(args.sample_path)
   image_transformed = transform(image)
 
+  
+  if args.variant:
+       args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
+  
+  elif args.ablated_component :
+       args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
+  else:
+       args.ablated_component = "none"
+       args.custom_trained_model = f'finetuned_models/none/best_checkpoint.pth'
+      
+
+  model = model_env(pretrained=False, 
+                      nb_classes=100,  
+                      ablated_component= args.ablated_component,
+                      variant = args.variant,
+                      hooks = True,
+                    )
+        #model_LRP.head = torch.nn.Linear(model_LRP.head.weight.shape[1],100)
+  checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
+
+  model.load_state_dict(checkpoint['model'], strict=False)
+  model.cuda()
+  model.eval()
+  attribution_generator = LRP(model)
+
   output = model(image_transformed.unsqueeze(0).cuda())
   print_top_classes(output)
 
@@ -118,13 +146,20 @@ if __name__ == "__main__":
   method_name = None
   vis = None
   if args.method == "transformer_attribution":
-    vis = generate_visualization(image_transformed, int(args.class_index))
+    vis = generate_visualization(image_transformed, args.class_index)
     method_name = "Att"
   else:
-    vis = generate_visualization_LRP(image_transformed, int(args.class_index))
+    vis = generate_visualization_LRP(image_transformed, args.class_index)
     method_name = "lrp"
 
-  plt.imsave(f"testing/{img_name}_{method_name}_{args.class_index}.jpg", vis)
+  saved_image_path = f"testing/{img_name}_{method_name}"
+  if args.ablated_component:
+      saved_image_path+=f"abl_{args.ablated_component}.jpg"
+  elif args.variant:
+      saved_image_path+=f"var_{args.variant}.jpg"
+  else:
+      pass
+  plt.imsave(saved_image_path, vis)
 
   
 

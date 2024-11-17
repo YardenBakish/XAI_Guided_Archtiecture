@@ -14,7 +14,7 @@ def parse_args():
                         default=1,
                         help='')
     
-    parser.add_argument('--ablated-component', type=str,
+    parser.add_argument('--ablated-component', type=str, 
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
@@ -104,20 +104,30 @@ if __name__ == "__main__":
     
     
     
-    if args.ablated_component and args.variant:
-      print("does not support both a variant and ablation")
-      exit(1)
+    if args.ablated_component:
+      if args.ablated_component != 'none' and args.variant:
+        print("does not support both a variant and ablation")
+        exit(1)
     
     
     if args.ablated_component == None and args.variant == None and args.custom_trained_model == None:
-       print("have to specify a specific model, a variant, or ablation")
-       exit(1)
+       args.ablated_component = 'none'
+    
+    
     elif args.variant:
        args.output_dir   = f'finetuned_models/{args.variant}'
        args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
+      
+       run_gen_vis_cmd    +=  f' --variant {args.variant}'
+       run_gen_pert_cmd   +=  f' --variant {args.variant}'
+   
     elif args.ablated_component :
        args.output_dir   = f'finetuned_models/no_{args.ablated_component}'
        args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
+
+
+       run_gen_vis_cmd    +=  f' --ablated-component {args.ablated_component}'
+       run_gen_pert_cmd   +=  f' --ablated-component {args.ablated_component}'
     else:
       pass
 
@@ -128,6 +138,7 @@ if __name__ == "__main__":
 
     if args.output_dir:
         run_gen_pert_cmd +=  f' --output-dir {args.output_dir}'
+    
        
     if args.pass_vis == False:
       try:
