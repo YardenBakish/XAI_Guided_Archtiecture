@@ -407,14 +407,16 @@ def main(args):
         # only the position tokens are interpolated
         pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
         
+        
         print(pos_embed_checkpoint.shape)
         print("\n\n")
         print(pos_tokens.shape)
         print("\n\n")
-        print(orig_size.shape)
+        print(orig_size)
         print("\n\n")
-        print(embedding_size.shape)
-
+        print(embedding_size)
+        
+        
         pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
         pos_tokens = torch.nn.functional.interpolate(
             pos_tokens, size=(new_size, new_size), mode='bicubic', align_corners=False)

@@ -62,7 +62,9 @@ class Mlp(nn.Module):
     def forward(self, x):
         x = self.fc1(x)
         x = self.act(x)
+        x = x.transpose(1, 2)
         x = self.BN(x)
+        x = x.transpose(1, 2)
         x = self.drop(x)
         x = self.fc2(x)
         x = self.drop(x)
@@ -71,7 +73,9 @@ class Mlp(nn.Module):
     def relprop(self, cam, **kwargs):
         cam = self.drop.relprop(cam, **kwargs)
         cam = self.fc2.relprop(cam, **kwargs)
+        cam = cam.transpose(1, 2)
         cam = self.BN.relprop(cam, **kwargs)
+        cam = cam.transpose(1, 2)
         cam = self.act.relprop(cam, **kwargs)
         cam = self.fc1.relprop(cam, **kwargs)
         return cam
@@ -101,7 +105,7 @@ class Attention(nn.Module):
         self.proj = Linear(dim, dim)
         self.proj_drop = Dropout(proj_drop)
         self.softmax = Softmax(dim=-1) if ablated_component != "softmax" else None
-        self.seqLenInv = 1/197
+        self.seqLenInv = 1/(197)
         self.attn_cam = None
         self.attn = None
         self.v = None
@@ -217,24 +221,40 @@ class Block(nn.Module):
 
     def forward(self, x):
         x1, x2 = self.clone1(x, 2)
+
+        x2 = x2.transpose(1, 2)  # shape: (batch_size, embedding_dim, sequence_length)
+        x2 = self.norm1(x2)
+        x2 = x2.transpose(1, 2) 
        
-        x = self.add1([x1, self.attn(self.norm1(x2))])
+        x = self.add1([x1, self.attn(x2)])
         x1, x2 = self.clone2(x, 2)
+
+        x2 = x2.transpose(1, 2)  # shape: (batch_size, embedding_dim, sequence_length)
+        x2 = self.norm2(x2)
+        x2 = x2.transpose(1, 2) 
        
-        x = self.add2([x1, self.mlp(self.norm2(x2))])
+        x = self.add2([x1, self.mlp(x2)])
         return x
 
     def relprop(self, cam, **kwargs):
         (cam1, cam2) = self.add2.relprop(cam, **kwargs)
         cam2 = self.mlp.relprop(cam2, **kwargs)
        
+        cam2 = cam2.transpose(1, 2)
         cam2 = self.norm2.relprop(cam2, **kwargs)
+        cam2 = cam2.transpose(1, 2)
+
+
         cam = self.clone2.relprop((cam1, cam2), **kwargs)
 
         (cam1, cam2) = self.add1.relprop(cam, **kwargs)
         cam2 = self.attn.relprop(cam2, **kwargs)
-       
+
+        cam2 = cam2.transpose(1, 2)
         cam2 = self.norm1.relprop(cam2, **kwargs)
+        cam2 = cam2.transpose(1, 2)
+       
+       
         cam = self.clone1.relprop((cam1, cam2), **kwargs)
         return cam
 
@@ -341,8 +361,10 @@ class VisionTransformer(nn.Module):
 
         for blk in self.blocks:
             x = blk(x)
-      
+        x = x.transpose(1, 2)
         x = self.norm(x)
+        x = x.transpose(1, 2)
+
         x = self.pool(x, dim=1, indices=torch.tensor(0, device=x.device))
         x = x.squeeze(1)
         x = self.head(x)
@@ -354,8 +376,10 @@ class VisionTransformer(nn.Module):
         cam = self.head.relprop(cam, **kwargs)
         cam = cam.unsqueeze(1)
         cam = self.pool.relprop(cam, **kwargs)
-       
+        cam = cam.transpose(1,2)
         cam = self.norm.relprop(cam, **kwargs)
+        cam = cam.transpose(1,2)
+
         for blk in reversed(self.blocks):
             cam = blk.relprop(cam, **kwargs)
 
