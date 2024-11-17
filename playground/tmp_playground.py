@@ -24,6 +24,7 @@ python evaluate_perturbations.py --output-dir finetuned_models  --method transfo
 
 
 python evaluate_perturbations.py --ablated_component bias --output-dir finetuned_models  --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
+python evaluate_perturbations.py --variant relu --output-dir finetuned_models  --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
 
 # full_lrp
 
@@ -34,4 +35,4 @@ python main.py --ablated-component bias --eval --auto-resume --results-dir finet
 
 
 #visualize
-python visualize_heatmap.py --method transformer_attribution --sample-path val/n01877812/ILSVRC2012_val_00014040.JPEG
+python visualize_heatmap.py --method transformer_attribution --sample-path val/n01514859/ILSVRC2012_val_00032162.JPEG
