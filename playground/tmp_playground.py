@@ -24,6 +24,10 @@ python main.py --is-ablation --ablated-component bias --auto-save --auto-resume 
 python evaluate_perturbations.py --output-dir finetuned_models  --method transformer_attribution --data-path ./ --batch-size 1 --custom-trained-model finetuned_models/none/best_checkpoint.pth --num-workers 1 --both
 
 
+
+python evaluate_perturbations.py --custom-trained-model finetuned_models/none/checkpoint_14.pth --output-dir finetuned_models  --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
+
+
 python evaluate_perturbations.py --ablated_component bias --output-dir finetuned_models  --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
 python evaluate_perturbations.py --variant relu --output-dir finetuned_models  --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
 
@@ -36,8 +40,7 @@ python main.py --ablated-component bias --eval --auto-resume --results-dir finet
 python main.py --variant relu --eval --resume finetuned_models/relu/best_checkpoint.pth --results-dir finetuned_models --model deit_tiny_patch16_224 --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8 --epochs 30 --data-path ./ --num_workers 4 --batch-size 128 --warmup-epochs 1
 
 #visualize
-python visualize_heatmap.py --variant relu --method transformer_attribution --sample-path val/n01985128/ILSVRC2012_val_00032174.JPEG
-
+python visualize_heatmap.py --variant relu --method transformer_attribution --sample-path val/n01614925/ILSVRC2012_val_00006571.JPEG
 
 
 
@@ -61,3 +64,5 @@ val/n01877812/ILSVRC2012_val_00014040.JPEG
 val/n02006656/ILSVRC2012_val_00028586.JPEG
 val/n01514859/ILSVRC2012_val_00032162.JPEG
 val/n01440764/ILSVRC2012_val_00046252.JPEG
+val/n01985128/ILSVRC2012_val_00032174.JPEG
+finetuned_models/relu/checkpoint_29.pth
