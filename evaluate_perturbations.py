@@ -110,20 +110,26 @@ if __name__ == "__main__":
         exit(1)
     
     
+    if args.custom_trained_model:
+       print("WARNING: make sure your model fits the architecture")
+
     if args.ablated_component == None and args.variant == None and args.custom_trained_model == None:
        args.ablated_component = 'none'
     
-    
+   
+
     elif args.variant:
        args.output_dir   = f'finetuned_models/{args.variant}'
-       args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
+       if args.custom_trained_model == None:
+        args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
       
        run_gen_vis_cmd    +=  f' --variant {args.variant}'
        run_gen_pert_cmd   +=  f' --variant {args.variant}'
    
     elif args.ablated_component :
        args.output_dir   = f'finetuned_models/no_{args.ablated_component}'
-       args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
+       if args.custom_trained_model == None:
+        args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
 
 
        run_gen_vis_cmd    +=  f' --ablated-component {args.ablated_component}'

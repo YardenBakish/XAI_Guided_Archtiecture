@@ -105,7 +105,7 @@ class Attention(nn.Module):
         self.proj = Linear(dim, dim)
         self.proj_drop = Dropout(proj_drop)
         self.softmax = Softmax(dim=-1) if ablated_component != "softmax" else None
-        self.seqLenInv = 1/(197)
+        self.seqLenInv = 197 ** -0.5
         self.attn_cam = None
         self.attn = None
         self.v = None

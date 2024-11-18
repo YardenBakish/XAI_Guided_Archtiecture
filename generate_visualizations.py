@@ -11,7 +11,7 @@ from ViT_explanation_generator import Baselines, LRP
 from model_ablation import deit_tiny_patch16_224 as vit_LRP
 from models.model_wrapper import model_env 
 
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 from deit.datasets import build_dataset
 import torch
 
@@ -249,18 +249,26 @@ if __name__ == "__main__":
     ])
     dataset_val, _ = build_dataset(is_train=False, args=args)
     
-
+    #random 0.4
+    np.random.seed(42)
     total_size  = len(dataset_val)
+    indices = list(range(total_size))
+    subset_size = int(total_size * 0.01)
+    random_indices = np.random.choice(indices, size=subset_size, replace=False)
+    sampler = SubsetRandomSampler(random_indices)
+
+    #first 0.1
+    '''total_size  = len(dataset_val)
     subset_size = int(total_size * 0.1)
     indices     = list(range(subset_size))
-    dataset_val = Subset(dataset_val, indices)
+    dataset_val = Subset(dataset_val, indices)'''
 
     #print(subset.indices)
-    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+    #sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     #imagenet_ds = ImageNet(args.imagenet_validation_path, split='val', download=False, transform=transform)
-    sample_loader = torch.utils.data.DataLoader(
-        dataset_val,
+    sample_loader = torch.utils.data.DataLoader(    
+        dataset_val, sampler=sampler,
         batch_size=args.batch_size,
         shuffle=False,
         pin_memory=args.pin_mem,

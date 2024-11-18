@@ -90,6 +90,9 @@ if __name__ == "__main__":
                         default = "samples/catdog.png",
                         help='')
 
+  parser.add_argument('--custom-trained-model', 
+                    
+                        help='')
 
   parser.add_argument('--ablated-component', type=str, 
                         choices=['none','softmax', 'layerNorm', 'bias'],)
@@ -111,16 +114,19 @@ if __name__ == "__main__":
   image = Image.open(args.sample_path)
   image_transformed = transform(image)
 
-  
-  if args.variant:
-       args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
-  
-  elif args.ablated_component :
-       args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
-  else:
-       args.ablated_component = "none"
-       args.custom_trained_model = f'finetuned_models/none/best_checkpoint.pth'
+  if args.custom_trained_model == None:
+    if args.variant:
+         args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
+
+    elif args.ablated_component :
+         args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
+    else:
+         args.ablated_component = "none"
+         args.custom_trained_model = f'finetuned_models/none/best_checkpoint.pth'
       
+  else:
+      print("WARNING: make sure that your model fit the architecture!")
+
 
   model = model_env(pretrained=False, 
                       nb_classes=100,  
