@@ -129,7 +129,9 @@ if __name__ == "__main__":
     parser.add_argument('--ablated-component', type=str,
                         choices=['softmax', 'layerNorm', 'bias'],)
     
-    
+    parser.add_argument('--work-env', type=str,
+                    
+                        help='')
     parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
 
     parser.add_argument('--custom-trained-model', type=str,
@@ -186,6 +188,8 @@ if __name__ == "__main__":
 
     # PATH variables
     PATH = os.path.dirname(os.path.abspath(__file__)) + '/'
+    if args.work_env:
+        PATH = args.work_env
     os.makedirs(os.path.join(PATH, 'visualizations'), exist_ok=True)
 
     try:
@@ -253,7 +257,7 @@ if __name__ == "__main__":
     np.random.seed(42)
     total_size  = len(dataset_val)
     indices = list(range(total_size))
-    subset_size = int(total_size * 0.01)
+    subset_size = int(total_size * 0.1)
     random_indices = np.random.choice(indices, size=subset_size, replace=False)
     sampler = SubsetRandomSampler(random_indices)
 

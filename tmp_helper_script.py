@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import re
 
 #helps to control a subset of the dataset for sanity checks
 # TODO:delete this file when no longer needed 
@@ -40,8 +41,39 @@ def move_directories(source_dir, dest_dir):
 
     print(f"Completed moving {len(directories_to_move)} directories to '{dest_dir}'.")
 
+
+def get_sorted_checkpoints(directory):
+    # List to hold the relative paths and their associated numeric values
+    checkpoints = []
+
+    # Walk through the directory
+    for root, _, files in os.walk(directory):
+        for file in files:
+            # Check if the file matches the pattern 'checkpoint_*.pth'
+            match = re.match(r'checkpoint_(\d+)\.pth', file)
+            if match:
+                # Extract the number from the filename
+                number = int(match.group(1))
+                # Get the relative path of the file
+                relative_path = os.path.relpath(os.path.join(root, file), directory)
+                # Append tuple (number, relative_path)
+                checkpoints.append((number, relative_path))
+
+    # Sort the checkpoints by the number
+    checkpoints.sort(key=lambda x: x[0])
+
+    # Return just the sorted relative paths
+    return [f'{directory}/{relative_path}'  for _, relative_path in checkpoints]
+
+
+def create_dirs(path):
+    os.makedirs(path,exist_ok=True)
+
 # Example usage:
 source_directory = 'val'
 destination_directory = 'train'
 
-move_directories(source_directory, destination_directory)
+#move_directories(source_directory, destination_directory)
+
+x = get_sorted_checkpoints("finetuned_models/batchnorm/")
+print(x)

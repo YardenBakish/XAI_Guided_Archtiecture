@@ -208,6 +208,10 @@ if __name__ == "__main__":
                         default=1,
                         help='')
     
+    parser.add_argument('--work-env', type=str,
+                    
+                        help='')
+    
     parser.add_argument('--output-dir', type=str,
                         help='')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
@@ -260,6 +264,8 @@ if __name__ == "__main__":
 
     # PATH variables
     PATH = os.path.dirname(os.path.abspath(__file__)) + '/'
+    if args.work_env:
+        PATH = args.work_env
  
     os.makedirs(os.path.join(PATH, 'experiments'), exist_ok=True)
     os.makedirs(os.path.join(PATH, 'experiments/perturbations'), exist_ok=True)

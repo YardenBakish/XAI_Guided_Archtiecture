@@ -13,6 +13,10 @@ def parse_args():
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
+  
+    parser.add_argument('--work-env', type=str,
+                    
+                        help='')
     
     parser.add_argument('--ablated-component', type=str, 
                         choices=['softmax', 'layerNorm', 'bias'],)
@@ -119,7 +123,8 @@ if __name__ == "__main__":
    
 
     elif args.variant:
-       args.output_dir   = f'finetuned_models/{args.variant}'
+       if args.output_dir == None:
+        args.output_dir   = f'finetuned_models/{args.variant}'
        if args.custom_trained_model == None:
         args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
       
@@ -127,7 +132,8 @@ if __name__ == "__main__":
        run_gen_pert_cmd   +=  f' --variant {args.variant}'
    
     elif args.ablated_component :
-       args.output_dir   = f'finetuned_models/no_{args.ablated_component}'
+       if args.output_dir == None:
+        args.output_dir   = f'finetuned_models/no_{args.ablated_component}'
        if args.custom_trained_model == None:
         args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
 
@@ -138,9 +144,19 @@ if __name__ == "__main__":
       pass
 
     
+    os.makedirs(args.output_dir, exist_ok=True)
+
     if args.custom_trained_model:
         run_gen_vis_cmd   +=  f' --custom-trained-model {args.custom_trained_model}'
         run_gen_pert_cmd +=  f' --custom-trained-model {args.custom_trained_model}'
+      
+    if args.work_env:
+        if "work_env" not in args.work_env:
+           print("work_env must be in work env path")
+           exit(1)
+        os.makedirs(args.work_env, exist_ok=True)
+        run_gen_vis_cmd   +=  f' --work-env {args.work_env}'
+        run_gen_pert_cmd +=  f'  --work-env {args.work_env}'
 
     if args.output_dir:
         run_gen_pert_cmd +=  f' --output-dir {args.output_dir}'
@@ -179,5 +195,8 @@ if __name__ == "__main__":
         except subprocess.CalledProcessError as e:
           print(f"Error: {e}")
           exit(1)
+
+    if args.work_env:
+      subprocess.run(f'rm -rf {args.work_env}',check=True, shell=True)
        
     
