@@ -22,7 +22,7 @@ def parse_args():
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus'], type=str, help="")
     
     parser.add_argument('--output-dir', type=str,
                         help='')

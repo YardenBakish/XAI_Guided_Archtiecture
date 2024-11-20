@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 __all__ = ['forward_hook', 'Clone', 'Add', 'Cat', 'ReLU', 'GELU', 'Dropout', 'BatchNorm2d', 'Linear', 'MaxPool2d',
            'AdaptiveAvgPool2d', 'AvgPool2d', 'Conv2d', 'Sequential', 'safe_divide', 'einsum', 'Softmax', 'IndexSelect',
-           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' ]
+           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus']
 
 
 def safe_divide(a, b):
@@ -71,6 +71,8 @@ class GELU(nn.GELU, RelProp):
     pass
 
 
+class Softplus(nn.Softplus, RelProp):
+    pass
 
 class Softmax(nn.Softmax, RelProp):
     pass

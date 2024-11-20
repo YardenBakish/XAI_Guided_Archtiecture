@@ -224,7 +224,7 @@ if __name__ == "__main__":
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus'], type=str, help="")
     
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')

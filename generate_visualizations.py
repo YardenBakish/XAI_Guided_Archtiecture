@@ -132,7 +132,7 @@ if __name__ == "__main__":
     parser.add_argument('--work-env', type=str,
                     
                         help='')
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus'], type=str, help="")
 
     parser.add_argument('--custom-trained-model', type=str,
                    

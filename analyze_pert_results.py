@@ -27,7 +27,7 @@ def parse_args():
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus'], type=str, help="")
     
     parser.add_argument('--output-dir', type=str,
                         help='')
@@ -199,7 +199,7 @@ def run_perturbations(args):
         exit(1)
     
 
-    if args.ablated_component == None and args.variant == None and args.custom_trained_model == None:
+    if args.ablated_component == None and args.variant == None:
        model = 'none'
     
    
@@ -271,7 +271,7 @@ def generate_plots(dir_path):
 
 
 def analyze(args):
-   choices = [ "relu", "none", "rmsnorm", "no_bias" ] 
+   choices = [ "relu", "none", "rmsnorm", "no_bias", "softplus" ] 
    root_dir = f'finetuned_models'
    
    if args.generate_plots:
@@ -285,6 +285,11 @@ def analyze(args):
    max_neg_subdir  = None
    max_neg_key     = None
   
+   pos_list        = []
+   max_pos         = float('inf')
+   max_pos_subdir  = None
+   max_pos_key     = None
+
    for c in choices:
     subdir = f'{root_dir}/{c}'
     acc_results_path = os.path.join(subdir, 'acc_results.json')
@@ -300,14 +305,15 @@ def analyze(args):
         max_neg_key = key
 
 
-    neg_list.sort(reverse=True, key=lambda x: x[0])
-    print(f"The subdir with the highest neg value is {max_neg_subdir}")
-    print(f"Iter: {max_neg_key}, Neg Value: {max_neg}, Pos Value: {pos_val}")
-    
-    print("best pert score by negative perutrbations")
-    for i in range(min(10, len(neg_list))):  # Make sure to not go beyond the available number of values
-        neg_value, pos_value, subdir, key = neg_list[i]
-        print(f"{i+1}. Subdir: {subdir} | Iter: {key} | Neg AUC: {neg_value} | POS AUC: {pos_value}")
+ 
+
+   neg_list.sort(reverse=True, key=lambda x: x[0])
+   print(f"The subdir with the highest neg value is {max_neg_subdir}")
+   print(f"Iter: {max_neg_key}, Neg Value: {max_neg}, Pos Value: {pos_val}")
+   print("best pert score by negative perutrbations")
+   for i in range(min(30, len(neg_list))):  # Make sure to not go beyond the available number of values
+    neg_value, pos_value, subdir, key = neg_list[i]
+    print(f"{i+1}. Subdir: {subdir} | Iter: {key} | Neg AUC: {neg_value} | POS AUC: {pos_value}")
 
 
 
