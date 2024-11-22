@@ -51,7 +51,7 @@ def get_args_parser():
     parser.add_argument('--auto-resume',action='store_true',)
     parser.add_argument('--auto-save',action='store_true',)
     parser.add_argument('--is-ablation',action='store_true',)
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus'], type=str, help="")
 
 
 

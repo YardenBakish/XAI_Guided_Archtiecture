@@ -98,7 +98,7 @@ if __name__ == "__main__":
                         choices=['none','softmax', 'layerNorm', 'bias'],)
     
     
-  parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus'], type=str, help="")
+  parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus'], type=str, help="")
   parser.add_argument('--class-index', 
                        # default = "243",
                        type=int,

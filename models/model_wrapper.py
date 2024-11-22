@@ -8,7 +8,8 @@ from models.variant_rmsnorm.model_variant_rmsnorm_no_hooks import deit_tiny_patc
 from models.variant_rmsnorm.model_variant_rmsnorm import deit_tiny_patch16_224 as model_variant_rmsnorm
 from models.variant_softplus.model_variant_softplus_no_hooks import deit_tiny_patch16_224 as model_variant_softplus_no_hooks
 from models.variant_softplus.model_variant_softplus import deit_tiny_patch16_224 as model_variant_softplus
-
+from models.variant_rms_softplus.model_variant_rms_softplus_no_hooks import deit_tiny_patch16_224 as model_variant_rms_softplus_no_hooks
+from models.variant_rms_softplus.model_variant_rms_softplus import deit_tiny_patch16_224 as model_variant_rms_softplus
 
 
 
@@ -38,6 +39,24 @@ def model_env(pretrained=False, hooks = False, nb_classes = 100, ablated_compone
             num_classes=nb_classes,
            # ablated_component= ablated_component
             )
+        
+    if variant == "rmsnorm_softplus":
+        if hooks:
+            print(f"calling model RMSNorm-softplus with hooks: {hooks}")
+
+            return model_variant_rms_softplus(
+            pretrained=pretrained,
+            num_classes=nb_classes,
+           # ablated_component= ablated_component
+            )
+        else:
+            print(f"calling model RMSNorm-softplus with hooks: {hooks}")
+            return model_variant_rms_softplus_no_hooks(
+            pretrained=pretrained,
+            num_classes=nb_classes,
+           # ablated_component= ablated_component
+            )
+    
     if variant == "relu":
         if hooks:
             print(f"calling model RELU with hooks: {hooks}")
