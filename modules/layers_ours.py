@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 __all__ = ['forward_hook', 'Clone', 'Add', 'Cat', 'ReLU', 'GELU', 'Dropout', 'BatchNorm2d', 'Linear', 'MaxPool2d',
            'AdaptiveAvgPool2d', 'AvgPool2d', 'Conv2d', 'Sequential', 'safe_divide', 'einsum', 'Softmax', 'IndexSelect',
-           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus']
+           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid']
 
 
 def safe_divide(a, b):
@@ -82,6 +82,9 @@ class LayerNorm(nn.LayerNorm, RelProp):
 
 
 class RMSNorm(nn.RMSNorm, RelProp):
+    pass
+
+class Sigmoid(nn.Sigmoid, RelProp):
     pass
 
 class BatchNorm1D(nn.BatchNorm1d, RelProp):
@@ -289,3 +292,69 @@ class Conv2d(nn.Conv2d, RelProp):
 
             R = alpha * activator_relevances - beta * inhibitor_relevances
         return R
+
+
+
+
+
+
+class UncenteredLayerNorm(RelProp):
+    __constants__ = ['normalized_shape', 'eps', 'elementwise_affine' ]
+    normalized_shape: tuple
+    eps: float
+    elementwise_affine: bool
+
+
+
+    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True, bias=True, center=True):
+        super(UncenteredLayerNorm, self).__init__()
+        
+        if isinstance(normalized_shape, int):
+            normalized_shape = (normalized_shape,)
+        self.normalized_shape = tuple(normalized_shape)
+        self.eps = eps
+        self.elementwise_affine = elementwise_affine
+        self.has_bias = bias
+        self.has_center = center
+        
+        if self.elementwise_affine:
+            self.weight = nn.Parameter(torch.empty(normalized_shape))
+            if bias:
+                self.bias = nn.Parameter(torch.empty(normalized_shape))
+            else:
+                self.register_parameter('bias', None)
+        else:
+            self.register_parameter('weight', None)
+            self.register_parameter('bias', None)
+            
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        if self.elementwise_affine:
+            nn.init.ones_(self.weight)
+            if self.bias is not None:
+                nn.init.zeros_(self.bias)
+
+    def forward(self, x):
+        if self.has_center:
+            # Standard LayerNorm behavior with centering
+            mean = x.mean(-1, keepdim=True)
+            var = x.pow(2).mean(-1, keepdim=True) - mean.pow(2)
+            x = (x - mean) / torch.sqrt(var + self.eps)
+        else:
+            # Uncentered version
+            var = x.pow(2).mean(-1, keepdim=True)
+            x = x / torch.sqrt(var + self.eps)
+        
+        if self.elementwise_affine:
+            if self.bias is not None:
+                x = self.weight * x + self.bias
+            else:
+                x = self.weight * x
+            
+        return x
+
+    def extra_repr(self):
+        return '{normalized_shape}, eps={eps}, ' \
+            'elementwise_affine={elementwise_affine}, ' \
+            'bias={bias}'.format(**self.__dict__)

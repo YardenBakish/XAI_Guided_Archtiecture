@@ -48,6 +48,13 @@ def compute_rollout_attention(all_layer_matrices, start_layer=0):
         joint_attention = all_layer_matrices[i].bmm(joint_attention)
     return joint_attention
 
+
+
+
+
+
+
+
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, drop=0.):
         super().__init__()
@@ -55,16 +62,12 @@ class Mlp(nn.Module):
         hidden_features = hidden_features or in_features
         self.fc1 = Linear(in_features, hidden_features)
         self.act = GELU()
-        self.BN  = BatchNorm1D(hidden_features)
         self.fc2 = Linear(hidden_features, out_features)
         self.drop = Dropout(drop)
 
     def forward(self, x):
         x = self.fc1(x)
         x = self.act(x)
-        x = x.transpose(1, 2)
-        x = self.BN(x)
-        x = x.transpose(1, 2)
         x = self.drop(x)
         x = self.fc2(x)
         x = self.drop(x)
@@ -73,9 +76,6 @@ class Mlp(nn.Module):
     def relprop(self, cam, **kwargs):
         cam = self.drop.relprop(cam, **kwargs)
         cam = self.fc2.relprop(cam, **kwargs)
-        cam = cam.transpose(1, 2)
-        cam = self.BN.relprop(cam, **kwargs)
-        cam = cam.transpose(1, 2)
         cam = self.act.relprop(cam, **kwargs)
         cam = self.fc1.relprop(cam, **kwargs)
         return cam
@@ -95,8 +95,6 @@ class Attention(nn.Module):
 
         # A = Q*K^T
         self.matmul1 = einsum('bhid,bhjd->bhij')
-
-        self.batchNorm2D = BatchNorm2d(num_heads)
         # attn = A*V
         self.matmul2 = einsum('bhij,bhjd->bhid')
 
@@ -105,7 +103,7 @@ class Attention(nn.Module):
         self.proj = Linear(dim, dim)
         self.proj_drop = Dropout(proj_drop)
         self.softmax = Softmax(dim=-1) if ablated_component != "softmax" else None
-        self.seqLenInv = 197 ** -0.5
+
         self.attn_cam = None
         self.attn = None
         self.v = None
@@ -150,14 +148,8 @@ class Attention(nn.Module):
         self.save_v(v)
 
         dots = self.matmul1([q, k]) * self.scale
-        #changehere
-        dots = self.batchNorm2D(dots)
-
         if self.ablated_component != "softmax":
             attn = self.softmax(dots)
-        
-        #changehere
-        attn = attn * self.seqLenInv
         attn = self.attn_drop(attn)
 
         self.save_attn(attn)
@@ -186,8 +178,7 @@ class Attention(nn.Module):
         cam1 = self.attn_drop.relprop(cam1, **kwargs)
         if self.ablated_component != "softmax":
             cam1 = self.softmax.relprop(cam1, **kwargs)
-        
-        cam1 = self.batchNorm2D.relprop(cam1, **kwargs)
+
         # A = Q*K^T
         (cam_q, cam_k) = self.matmul1.relprop(cam1, **kwargs)
         cam_q /= 2
@@ -200,15 +191,26 @@ class Attention(nn.Module):
 
 class Block(nn.Module):
 
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0., ablated_component=""):
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0., ablated_component="", ablated_norm = ""):
         super().__init__()
+
+        norm_bias   = True
+        norm_center = True
+        if ablated_norm == "norm_ablation" or ablated_norm == "norm_bias_ablation":
+            norm_bias   = False
+        if ablated_norm == "norm_ablation" or ablated_norm == "norm_center_ablation":
+            norm_center = False
       #  print(f"inside a block, ablated component: {ablated_component}")
         if ablated_component == "bias":
             print(f"qkv_bias is : {qkv_bias}")
-        self.norm1 = BatchNorm1D(dim, eps=1e-6) 
+        print(f"inside attention with center as: {norm_center} | bias : {norm_bias}")
+
+        self.norm1 = UncenteredLayerNorm(dim,eps=1e-6, bias = norm_bias, center = norm_center) 
+        
+      
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, ablated_component = ablated_component)
-        self.norm2 = BatchNorm1D(dim, eps=1e-6) 
+        self.norm2 = UncenteredLayerNorm(dim,eps=1e-6, bias = norm_bias, center = norm_center) 
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, drop=drop)
 
@@ -221,40 +223,28 @@ class Block(nn.Module):
 
     def forward(self, x):
         x1, x2 = self.clone1(x, 2)
-
-        x2 = x2.transpose(1, 2)  # shape: (batch_size, embedding_dim, sequence_length)
-        x2 = self.norm1(x2)
-        x2 = x2.transpose(1, 2) 
-       
-        x = self.add1([x1, self.attn(x2)])
+        if self.ablated_component == "layerNorm":
+            x = self.add1([x1, self.attn(x2)])
+        else:
+            x = self.add1([x1, self.attn(self.norm1(x2))])
         x1, x2 = self.clone2(x, 2)
-
-        x2 = x2.transpose(1, 2)  # shape: (batch_size, embedding_dim, sequence_length)
-        x2 = self.norm2(x2)
-        x2 = x2.transpose(1, 2) 
-       
-        x = self.add2([x1, self.mlp(x2)])
+        if self.ablated_component == "layerNorm":
+            x = self.add2([x1, self.mlp(x2)])
+        else:
+            x = self.add2([x1, self.mlp(self.norm2(x2))])
         return x
 
     def relprop(self, cam, **kwargs):
         (cam1, cam2) = self.add2.relprop(cam, **kwargs)
         cam2 = self.mlp.relprop(cam2, **kwargs)
-       
-        cam2 = cam2.transpose(1, 2)
-        cam2 = self.norm2.relprop(cam2, **kwargs)
-        cam2 = cam2.transpose(1, 2)
-
-
+        if self.ablated_component != "layerNorm":
+            cam2 = self.norm2.relprop(cam2, **kwargs)
         cam = self.clone2.relprop((cam1, cam2), **kwargs)
 
         (cam1, cam2) = self.add1.relprop(cam, **kwargs)
         cam2 = self.attn.relprop(cam2, **kwargs)
-
-        cam2 = cam2.transpose(1, 2)
-        cam2 = self.norm1.relprop(cam2, **kwargs)
-        cam2 = cam2.transpose(1, 2)
-       
-       
+        if self.ablated_component != "layerNorm":
+            cam2 = self.norm1.relprop(cam2, **kwargs)
         cam = self.clone1.relprop((cam1, cam2), **kwargs)
         return cam
 
@@ -292,9 +282,9 @@ class VisionTransformer(nn.Module):
     """ Vision Transformer with support for patch or hybrid CNN input stage
     """
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
-                 num_heads=12, mlp_ratio=4., qkv_bias=False, mlp_head=False, drop_rate=0., attn_drop_rate=0., ablated_component = ""):
+                 num_heads=12, mlp_ratio=4., qkv_bias=False, mlp_head=False, drop_rate=0., attn_drop_rate=0., ablated_component = "", ablated_norm = ""):
         super().__init__()
-        print(f"ablated component: {ablated_component}")
+        print(f"ablated norm: {ablated_norm}")
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.patch_embed = PatchEmbed(
@@ -304,13 +294,22 @@ class VisionTransformer(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.ablated_component = ablated_component
+        self.ablated_norm = ablated_norm
+
         self.blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
-                drop=drop_rate, attn_drop=attn_drop_rate, ablated_component=ablated_component)
+                drop=drop_rate, attn_drop=attn_drop_rate, ablated_component=ablated_component, ablated_norm = ablated_norm)
             for i in range(depth)])
 
-        self.norm = BatchNorm1D(embed_dim) 
+        norm_bias   = True
+        norm_center = True
+        if ablated_norm == "norm_ablation" or ablated_norm == "norm_bias_ablation":
+            norm_bias   = False
+        if ablated_norm == "norm_ablation" or ablated_norm == "norm_center_ablation":
+            norm_center = False
+        print(f"inside transformer with center as: {norm_center} | bias : {norm_bias}")
+        self.norm = UncenteredLayerNorm(embed_dim, bias = norm_bias, center = norm_center) 
         if mlp_head:
             # paper diagram suggests 'MLP head', but results in 4M extra parameters vs paper
             self.head = Mlp(embed_dim, int(embed_dim * mlp_ratio), num_classes)
@@ -341,7 +340,7 @@ class VisionTransformer(nn.Module):
             trunc_normal_(m.weight, std=.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.BatchNorm1d):
+        elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
@@ -361,10 +360,8 @@ class VisionTransformer(nn.Module):
 
         for blk in self.blocks:
             x = blk(x)
-        x = x.transpose(1, 2)
-        x = self.norm(x)
-        x = x.transpose(1, 2)
-
+        if self.ablated_component != "layerNorm":
+            x = self.norm(x)
         x = self.pool(x, dim=1, indices=torch.tensor(0, device=x.device))
         x = x.squeeze(1)
         x = self.head(x)
@@ -376,10 +373,8 @@ class VisionTransformer(nn.Module):
         cam = self.head.relprop(cam, **kwargs)
         cam = cam.unsqueeze(1)
         cam = self.pool.relprop(cam, **kwargs)
-        cam = cam.transpose(1,2)
-        cam = self.norm.relprop(cam, **kwargs)
-        cam = cam.transpose(1,2)
-
+        if self.ablated_component != "layerNorm":
+            cam = self.norm.relprop(cam, **kwargs)
         for blk in reversed(self.blocks):
             cam = blk.relprop(cam, **kwargs)
 
@@ -470,13 +465,13 @@ def deit_base_patch16_224(pretrained=False, **kwargs):
 
 
 
-def deit_tiny_patch16_224(pretrained=False, ablated_component ="", **kwargs):
+def deit_tiny_patch16_224(pretrained=False, ablated_component ="", ablated_norm = "", **kwargs):
     isWithBias = True
     if ablated_component == "bias":
         isWithBias = False
 
     model = VisionTransformer(
-        patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, qkv_bias=isWithBias, ablated_component = ablated_component,
+        patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, qkv_bias=isWithBias, ablated_component = ablated_component, ablated_norm = ablated_norm,
         **kwargs)
     model.default_cfg = _cfg()
     if pretrained:

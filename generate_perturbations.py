@@ -224,7 +224,7 @@ if __name__ == "__main__":
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus' ], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid' ], type=str, help="")
     
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -312,9 +312,13 @@ if __name__ == "__main__":
     # Model
 
     if args.custom_trained_model != None:
-        args.nb_classes = 100
+        if args.data_set == 'IMNET100':
+            args.nb_classes = 100
+        else:
+            args.nb_classes = 1000
+
         model = model_env(pretrained=False, 
-                      nb_classes=100,  
+                      nb_classes=args.nb_classes,  
                       ablated_component= args.ablated_component,
                       variant = args.variant,
                       hooks = True,

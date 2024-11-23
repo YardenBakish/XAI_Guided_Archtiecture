@@ -14,6 +14,7 @@ def parse_args():
     
     parser.add_argument('--pass-vis', action='store_true')
     parser.add_argument('--generate-plots', action='store_true', default=True)
+   
 
     
     parser.add_argument('--batch-size', type=int,
@@ -27,10 +28,9 @@ def parse_args():
                         choices=['softmax', 'layerNorm', 'bias', 'softplus'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
     
-    parser.add_argument('--output-dir', type=str,
-                        help='')
+   
     parser.add_argument('--neg', type=int, choices = [0,1], default = 0)
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
@@ -168,12 +168,19 @@ TEMPORARY! based on current accuarcy results
 def filter_epochs(model, epoch):
    if model == "softplus":
       return epoch in [33,34,40,45,46,49]
+   elif model == "norm_center_ablation":
+      return epoch in [0,2]
+   elif model == "norm_bias_ablation":
+      return epoch in [1,2,3,9,13,18,19,23,29]
    elif model == "rmsnorm":
       return epoch in [0,1,2,3,9,13,18,19,23,29]
    elif model == "relu":
       return epoch in [9, 14, 20, 31, 32, 33, 35, 45, 52, 71]
    elif model == "no_bias":
-      return epoch in [7,6,1,3] # 22 26 28 29
+      return epoch in [59,58,56,54,44,47,40,37,33,32,29,26,23] 
+   elif model == "rmsnorm_softplus":
+      return epoch in [59,58,50,48,46,44,40,35] # 22 26 28 29
+
    else:
       return epoch in [14,12,16,18,29, 28, 26, 24, 22,10,8]
       
@@ -214,7 +221,7 @@ def run_perturbations(args):
        model          = f'no_{args.ablated_component}'
        eval_pert_cmd += f' --ablated-component {args.ablated_component}'
 
-    model_dir = f'{root_dir}/{model}'
+    model_dir = f'{root_dir}/{model}_{args.data_set}'
 
     checkpoints =  get_sorted_checkpoints(model_dir)
 
@@ -271,14 +278,19 @@ def generate_plots(dir_path):
     plt.show()
 
 
+def parse_subdir(subdir):
+   exp_name = subdir.split("/")[-1].rsplit('_', 1)[0]
+   exp_name = exp_name if exp_name != "none" else "basic"
+   return exp_name
+
 
 def analyze(args):
-   choices = [ "relu", "none", "rmsnorm", "no_bias", "softplus", "rmsnorm_softplus"] 
+   choices = [ "relu", "none", "rmsnorm", "no_bias", "softplus", "rmsnorm_softplus", "norm_center_ablation", "norm_bias_ablation" ] #'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation'
    root_dir = f'finetuned_models'
    
    if args.generate_plots:
       for c in choices:
-        subdir = f'{root_dir}/{c}'
+        subdir = f'{root_dir}/{c}_{args.data_set}'
         generate_plots(subdir)
    
    
@@ -293,13 +305,13 @@ def analyze(args):
    min_pos_key     = None
 
    for c in choices:
-    subdir = f'{root_dir}/{c}'
+    subdir = f'{root_dir}/{c}_{args.data_set}'
     acc_results_path = os.path.join(subdir, 'acc_results.json')
     acc_dict = parse_acc_results(acc_results_path)
     pert_results_path = os.path.join(subdir, 'pert_results')
     pos_dict, neg_dict = parse_pert_results(pert_results_path, acc_dict.keys())
     for key, neg_value in neg_dict.items():
-       neg_list.append((neg_value, pos_dict[key], subdir, key))
+       neg_list.append((neg_value, pos_dict[key], subdir, key, acc_dict[key]))
        if neg_value > max_neg:
         pos_val = pos_dict[key]
         max_neg = neg_value
@@ -307,7 +319,7 @@ def analyze(args):
         max_neg_key = key
 
     for key, pos_value in pos_dict.items():
-       pos_list.append((pos_value, neg_dict[key], subdir, key))
+       pos_list.append((pos_value, neg_dict[key], subdir, key, acc_dict[key] ))
        if pos_value < min_pos:
         neg_val = neg_dict[key]
         min_pos = pos_value
@@ -322,13 +334,13 @@ def analyze(args):
    print(f"The subdir with the highest neg value is {max_neg_subdir}")
    print(f"Iter: {max_neg_key}, Neg Value: {max_neg}, Pos Value: {pos_val}")
    print("best pert score by negative perutrbations")
-   for i in range(min(40, len(neg_list))):  # Make sure to not go beyond the available number of values
-    neg_value, pos_value, subdir, key = neg_list[i]
-    print(f"{i+1}. Subdir: {subdir} | Iter: {key} | Neg AUC: {neg_value} | POS AUC: {pos_value}")
+   for i in range(min(60, len(neg_list))):  # Make sure to not go beyond the available number of values
+    neg_value, pos_value, subdir, key, acc = neg_list[i]
+    print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | Neg AUC: {neg_value} | POS AUC: {pos_value} | ACC1: {acc}")
    print("\n\n")
    for i in range(min(50, len(pos_list))):  # Make sure to not go beyond the available number of values
-    pos_value, neg_value, subdir, key = pos_list[i]
-    print(f"{i+1}. Subdir: {subdir} | Iter: {key} | POS AUC: {pos_value} | Neg AUC: {neg_value}")
+    pos_value, neg_value, subdir, key, acc = pos_list[i]
+    print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | POS AUC: {pos_value} | Neg AUC: {neg_value} | ACC1: {acc}")
 
 
 

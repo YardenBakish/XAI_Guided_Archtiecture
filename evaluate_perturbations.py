@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
-  
+    
     parser.add_argument('--work-env', type=str,
                     
                         help='')
@@ -22,7 +22,7 @@ def parse_args():
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
     
     parser.add_argument('--output-dir', type=str,
                         help='')
@@ -124,18 +124,18 @@ if __name__ == "__main__":
 
     elif args.variant:
        if args.output_dir == None:
-        args.output_dir   = f'finetuned_models/{args.variant}'
+        args.output_dir   = f'finetuned_models/{args.variant}_{args.data_set}'
        if args.custom_trained_model == None:
-        args.custom_trained_model = f'finetuned_models/{args.variant}/best_checkpoint.pth'
+        args.custom_trained_model = f'finetuned_models/{args.variant}_{args.data_set}/best_checkpoint.pth'
       
        run_gen_vis_cmd    +=  f' --variant {args.variant}'
        run_gen_pert_cmd   +=  f' --variant {args.variant}'
    
     elif args.ablated_component :
        if args.output_dir == None:
-        args.output_dir   = f'finetuned_models/no_{args.ablated_component}'
+        args.output_dir   = f'finetuned_models/no_{args.ablated_component}_{args.data_set}'
        if args.custom_trained_model == None:
-        args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}/best_checkpoint.pth'
+        args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}_{args.data_set}/best_checkpoint.pth'
 
 
        run_gen_vis_cmd    +=  f' --ablated-component {args.ablated_component}'

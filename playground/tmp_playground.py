@@ -20,7 +20,7 @@ python main.py --auto-save --auto-resume --results-dir finetuned_models  --model
 
 
 #evaluate basic DEIT
-python main.py --eval --resume finetuned_models/none/best_checkpoint.pth --model deit_tiny_patch16_224 --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8 --epochs 30 --data-path ./ --num_workers 4 --batch-size 128 --warmup-epochs 1
+python main.py --eval --resume finetuned_models/none_IMNET100/best_checkpoint.pth --model deit_tiny_patch16_224 --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8 --epochs 30 --data-path ./ --num_workers 4 --batch-size 128 --warmup-epochs 1
 
 
 ###########################################################################################
@@ -33,7 +33,7 @@ python main.py --eval --resume finetuned_models/none/best_checkpoint.pth --model
 
 
 #train ablated component fron finetuned
-python main.py --is-ablation --ablated-component bias --auto-save --results-dir finetuned_models   --finetune finetuned_models/none/best_checkpoint.pth  --model deit_tiny_patch16_224  --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8   --epochs 30  --data-path ./ --num_workers 4 --batch-size 128  --warmup-epochs 1
+python main.py --is-ablation --ablated-component bias --auto-save --results-dir finetuned_models   --finetune finetuned_models/none_IMNET100/best_checkpoint.pth  --model deit_tiny_patch16_224  --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8   --epochs 30  --data-path ./ --num_workers 4 --batch-size 128  --warmup-epochs 1
 
 
 
@@ -58,7 +58,7 @@ python main.py --variant rmsnorm_softplus --auto-save --results-dir finetuned_mo
 python main.py --variant relu --eval --resume finetuned_models/relu/best_checkpoint.pth --results-dir finetuned_models --model deit_tiny_patch16_224 --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8 --epochs 30 --data-path ./ --num_workers 4 --batch-size 128 --warmup-epochs 1
 
 #continue finetuning relu
-python main.py --variant relu --auto-save --auto-resume --results-dir finetuned_models  --model deit_tiny_patch16_224  --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8   --epochs 60  --data-path ./ --num_workers 4 --batch-size 128  --warmup-epochs 1
+python main.py --variant rmsnorm_softplus --auto-save --auto-resume --results-dir finetuned_models  --model deit_tiny_patch16_224  --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8   --epochs 80  --data-path ./ --num_workers 4 --batch-size 128  --warmup-epochs 1
 
 
 
@@ -93,7 +93,7 @@ python evaluate_perturbations.py --variant relu --custom-trained-model finetuned
 
 
 #analyze pertubations
-python analyze_pert_results.py --variant softplus --mode perturbations --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
+python analyze_pert_results.py --variant norm_bias_ablation --mode perturbations --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
 
 ###########################################################################################
 ###########################################################################################
@@ -106,10 +106,6 @@ python visualize_heatmap.py --custom-trained-model finetuned_models/rmsnorm/chec
 
 ###########################################################################################
 ###########################################################################################
-
-
-
-
 
 
 

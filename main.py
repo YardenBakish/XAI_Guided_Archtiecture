@@ -51,8 +51,7 @@ def get_args_parser():
     parser.add_argument('--auto-resume',action='store_true',)
     parser.add_argument('--auto-save',action='store_true',)
     parser.add_argument('--is-ablation',action='store_true',)
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus'], type=str, help="")
-
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
 
 
     
@@ -217,7 +216,7 @@ def get_args_parser():
 
 def main(args):
 
-   #input argument
+   
 
     if args.is_ablation and args.variant:
         print(args.variant)
@@ -230,7 +229,7 @@ def main(args):
     if args.is_ablation:
         exp_name = "no_"+exp_name
 
-
+    exp_name += f'_{args.data_set}' 
     if args.auto_save:
         results_exp_dir     = f'{args.results_dir}/{exp_name}'
         create_directory_if_not_exists(f'{args.results_dir}/{exp_name}')
@@ -277,8 +276,9 @@ def main(args):
 
     cudnn.benchmark = True
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
-    dataset_val, _ = build_dataset(is_train=False, args=args)
-    args.nb_classes = 100
+    dataset_val, args.nb_classes = build_dataset(is_train=False, args=args)
+    
+  
     
     if args.verbose:
         print("CHANGEHERE: Itamar set distributed as True")
@@ -351,7 +351,8 @@ def main(args):
     model = model_env(pretrained=False, 
                       nb_classes=args.nb_classes,  
                       ablated_component= args.ablated_component,
-                      variant = args.variant
+                      variant = args.variant,
+             
                       )
 
     
@@ -366,8 +367,8 @@ def main(args):
     )'''
     
     
-
-    model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
+    #if args.nb_classes == 100:
+    #    model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
 
                     
     if args.finetune:
@@ -380,6 +381,8 @@ def main(args):
         checkpoint_model = checkpoint['model']
         state_dict = model.state_dict()
         for k in ['head.weight', 'head.bias', 'head_dist.weight', 'head_dist.bias']:
+            if k not in state_dict:
+                continue
             if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
                 print(f"Removing key {k} from pretrained checkpoint")
                 del checkpoint_model[k]

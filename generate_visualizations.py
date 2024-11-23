@@ -132,7 +132,7 @@ if __name__ == "__main__":
     parser.add_argument('--work-env', type=str,
                     
                         help='')
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus'], type=str, help="")
+    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
 
     parser.add_argument('--custom-trained-model', type=str,
                    
@@ -223,10 +223,14 @@ if __name__ == "__main__":
 
     # LRP
     if args.custom_trained_model != None:
+        if args.data_set == 'IMNET100':
+            args.nb_classes = 100
+        else:
+            args.nb_classes = 1000
     
-        args.nb_classes = 100
+       
         model_LRP = model_env(pretrained=False, 
-                      nb_classes=100,  
+                      nb_classes=args.nb_classes,  
                       ablated_component= args.ablated_component,
                       variant = args.variant,
                       hooks = True,
