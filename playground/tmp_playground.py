@@ -46,7 +46,7 @@ python main.py --ablated-component bias --eval --auto-resume --results-dir finet
 
 
 ###########################################################################################
-###########################################################################################
+###########################d################################################################
 
 # VARIANT
 
@@ -93,7 +93,7 @@ python evaluate_perturbations.py --variant relu --custom-trained-model finetuned
 
 
 #analyze pertubations
-python analyze_pert_results.py --variant norm_bias_ablation --mode perturbations --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
+python analyze_pert_results.py --variant norm_bias_ablation --mode pertubations --method transformer_attribution --data-path ./ --batch-size 1  --num-workers 1 --both
 
 ###########################################################################################
 ###########################################################################################

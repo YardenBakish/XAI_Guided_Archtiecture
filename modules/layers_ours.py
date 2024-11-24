@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 __all__ = ['forward_hook', 'Clone', 'Add', 'Cat', 'ReLU', 'GELU', 'Dropout', 'BatchNorm2d', 'Linear', 'MaxPool2d',
            'AdaptiveAvgPool2d', 'AvgPool2d', 'Conv2d', 'Sequential', 'safe_divide', 'einsum', 'Softmax', 'IndexSelect',
-           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid']
+           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid', 'SigmoidAttention']
 
 
 def safe_divide(a, b):
@@ -84,8 +85,19 @@ class LayerNorm(nn.LayerNorm, RelProp):
 class RMSNorm(nn.RMSNorm, RelProp):
     pass
 
+
+
 class Sigmoid(nn.Sigmoid, RelProp):
     pass
+
+class SigmoidAttention(RelProp):
+    def __init__(self, n= 197):
+        super(SigmoidAttention, self).__init__()
+        self.b = -math.log(n)
+    
+    def forward(self,x):
+        return 1 / (1 + torch.exp(-(x + self.b)))
+
 
 class BatchNorm1D(nn.BatchNorm1d, RelProp):
     pass

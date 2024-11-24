@@ -9,7 +9,7 @@ from einops import rearrange
 from modules.layers_ours import *
 from baselines.ViT.weight_init import trunc_normal_
 from baselines.ViT.layer_helpers import to_2tuple
-import math
+
 
 def _cfg(url='', **kwargs):
     return {
@@ -49,13 +49,14 @@ def compute_rollout_attention(all_layer_matrices, start_layer=0):
     return joint_attention
 
 class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, drop=0.):
+    def __init__(self, in_features, hidden_features=None, out_features=None, drop=0., isWithBias=True):
         super().__init__()
+        print(f"inside bias with isWithBias: {isWithBias}")
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = Linear(in_features, hidden_features)
+        self.fc1 = Linear(in_features, hidden_features, bias = isWithBias)
         self.act = GELU()
-        self.fc2 = Linear(hidden_features, out_features)
+        self.fc2 = Linear(hidden_features, out_features, bias = isWithBias)
         self.drop = Dropout(drop)
 
     def forward(self, x):
@@ -75,19 +76,17 @@ class Mlp(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False,attn_drop=0., proj_drop=0., ablated_component = "", num_patches = 197):
+    def __init__(self, dim, num_heads=8, qkv_bias=False,attn_drop=0., proj_drop=0., ablated_component = ""):
         super().__init__()
         self.num_heads = num_heads
         self.ablated_component = ablated_component
         head_dim = dim // num_heads
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
         self.scale = head_dim ** -0.5
-        self.seqlen = num_patches 
-     
-
-
         #print(f"inside attention, ablated component: {ablated_component}")
+        isWithBias = True
         if ablated_component == "bias":
+            isWithBias = False
             print(f"is qkv_bias False: {qkv_bias}")
 
         # A = Q*K^T
@@ -97,9 +96,9 @@ class Attention(nn.Module):
 
         self.qkv = Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = Dropout(attn_drop)
-        self.proj = Linear(dim, dim)
+        self.proj = Linear(dim, dim, bias = isWithBias)
         self.proj_drop = Dropout(proj_drop)
-        self.act_variant = SigmoidAttention(n=num_patches)
+        self.softmax = Softmax(dim=-1) if ablated_component != "softmax" else None
 
         self.attn_cam = None
         self.attn = None
@@ -145,12 +144,12 @@ class Attention(nn.Module):
         self.save_v(v)
 
         dots = self.matmul1([q, k]) * self.scale
-      
-        attn = self.act_variant(dots) 
+        if self.ablated_component != "softmax":
+            attn = self.softmax(dots)
         attn = self.attn_drop(attn)
 
         self.save_attn(attn)
-        attn.register_hook(self.save_attn_gradients)
+       # attn.register_hook(self.save_attn_gradients)
 
         out = self.matmul2([attn, v])
         out = rearrange(out, 'b h n d -> b n (h d)')
@@ -173,8 +172,8 @@ class Attention(nn.Module):
         self.save_attn_cam(cam1)
 
         cam1 = self.attn_drop.relprop(cam1, **kwargs)
-    
-        cam1 = self.act_variant.relprop(cam1, **kwargs)
+        if self.ablated_component != "softmax":
+            cam1 = self.softmax.relprop(cam1, **kwargs)
 
         # A = Q*K^T
         (cam_q, cam_k) = self.matmul1.relprop(cam1, **kwargs)
@@ -188,17 +187,18 @@ class Attention(nn.Module):
 
 class Block(nn.Module):
 
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0., ablated_component="", num_patches = 197):
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0., ablated_component=""):
         super().__init__()
-        #print(f"inside a block, ablated component: {ablated_component}")
+        isWithBias = True 
         if ablated_component == "bias":
-            print(f"qkv_bias is : {qkv_bias}")
-        self.norm1 = LayerNorm(dim, eps=1e-6) if ablated_component != "layerNorm" else None
+            isWithBias = False
+            print(f"qkv_bias is : {qkv_bias},  is with bias: {isWithBias}")
+        self.norm1 = LayerNorm(dim, eps=1e-6, bias = isWithBias ) if ablated_component != "layerNorm" else None
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, ablated_component = ablated_component, num_patches = num_patches)
-        self.norm2 = LayerNorm(dim, eps=1e-6) if ablated_component != "layerNorm" else None
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, ablated_component = ablated_component)
+        self.norm2 = LayerNorm(dim, eps=1e-6, bias = isWithBias) if ablated_component != "layerNorm" else None
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, drop=drop)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, drop=drop, isWithBias = isWithBias)
 
         self.add1 = Add()
         self.add2 = Add()
@@ -270,30 +270,30 @@ class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, mlp_head=False, drop_rate=0., attn_drop_rate=0., ablated_component = ""):
         super().__init__()
-        #print(f"ablated component: {ablated_component}")
+        print(f"ablated component: {ablated_component}")
+        isWithBias = True if ablated_component != "bias" else False
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.patch_embed = PatchEmbed(
                 img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         num_patches = self.patch_embed.num_patches
 
-       
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.ablated_component = ablated_component
         self.blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
-                drop=drop_rate, attn_drop=attn_drop_rate, ablated_component=ablated_component, num_patches = num_patches+1)
+                drop=drop_rate, attn_drop=attn_drop_rate, ablated_component=ablated_component)
             for i in range(depth)])
 
-        self.norm = LayerNorm(embed_dim) if ablated_component != "layerNorm" else None
+        self.norm = LayerNorm(embed_dim, bias = isWithBias) if ablated_component != "layerNorm" else None
         if mlp_head:
             # paper diagram suggests 'MLP head', but results in 4M extra parameters vs paper
-            self.head = Mlp(embed_dim, int(embed_dim * mlp_ratio), num_classes)
+            self.head = Mlp(embed_dim, int(embed_dim * mlp_ratio), num_classes, 0., isWithBias)
         else:
             # with a single Linear layer as head, the param count within rounding of paper
-            self.head = Linear(embed_dim, num_classes)
+            self.head = Linear(embed_dim, num_classes, bias = isWithBias)
 
         # FIXME not quite sure what the proper weight init is supposed to be,
         # normal / trunc normal w/ std == .02 similar to other Bert like transformers
@@ -316,13 +316,14 @@ class VisionTransformer(nn.Module):
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
+            if isinstance(m, nn.Linear) and m.bias is not None and self.ablated_component != "bias":
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
+            if self.ablated_component != "bias":
+                nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    @property
+    @torch.jit.ignore
     def no_weight_decay(self):
         return {'pos_embed', 'cls_token'}
 
@@ -334,7 +335,7 @@ class VisionTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
         x = self.add([x, self.pos_embed])
 
-        x.register_hook(self.save_inp_grad)
+      #  x.register_hook(self.save_inp_grad)
 
         for blk in self.blocks:
             x = blk(x)
@@ -447,7 +448,7 @@ def deit_tiny_patch16_224(pretrained=False, ablated_component ="", **kwargs):
     isWithBias = True
     if ablated_component == "bias":
         isWithBias = False
-    print("running scaled sigmoid variant")
+
     model = VisionTransformer(
         patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, qkv_bias=isWithBias, ablated_component = ablated_component,
         **kwargs)

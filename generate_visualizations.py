@@ -261,7 +261,7 @@ if __name__ == "__main__":
     np.random.seed(42)
     total_size  = len(dataset_val)
     indices = list(range(total_size))
-    subset_size = int(total_size * 0.1)
+    subset_size = int(total_size * 0.04)
     random_indices = np.random.choice(indices, size=subset_size, replace=False)
     sampler = SubsetRandomSampler(random_indices)
 

@@ -9,7 +9,7 @@ from einops import rearrange
 from modules.layers_ours import *
 from baselines.ViT.weight_init import trunc_normal_
 from baselines.ViT.layer_helpers import to_2tuple
-
+import math
 
 def _cfg(url='', **kwargs):
     return {
@@ -83,6 +83,8 @@ class Attention(nn.Module):
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
         self.scale = head_dim ** -0.5
         self.seqlen = num_patches 
+     
+
 
         #print(f"inside attention, ablated component: {ablated_component}")
         if ablated_component == "bias":
@@ -97,7 +99,7 @@ class Attention(nn.Module):
         self.attn_drop = Dropout(attn_drop)
         self.proj = Linear(dim, dim)
         self.proj_drop = Dropout(proj_drop)
-        self.act_variant = Sigmoid()
+        self.act_variant = SigmoidAttention(n=num_patches)
 
         self.attn_cam = None
         self.attn = None
@@ -143,8 +145,8 @@ class Attention(nn.Module):
         self.save_v(v)
 
         dots = self.matmul1([q, k]) * self.scale
-       
-        attn = self.act_variant(dots - torch.log(self.seqlen)) 
+      
+        attn = self.act_variant(dots) 
         attn = self.attn_drop(attn)
 
         self.save_attn(attn)

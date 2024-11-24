@@ -2,17 +2,21 @@ import os
 
 import argparse
 import subprocess
-
+#import pandas as pd
 import re
 import json
 import matplotlib.pyplot as plt
-
+import numpy as np
 def parse_args():
     parser = argparse.ArgumentParser(description='evaluate perturbations')
     
     parser.add_argument('--mode', required=True, choices = ['perturbations', 'analyze'])
     
     parser.add_argument('--pass-vis', action='store_true')
+    parser.add_argument('--gen-latex', action='store_true')
+    parser.add_argument('--check-all', action='store_true')
+
+
     parser.add_argument('--generate-plots', action='store_true', default=True)
    
 
@@ -98,10 +102,53 @@ def parse_args():
     return args
 
 
+def gen_latex_table(list=[],  op = ""):
+   # Start the LaTeX table
+   seen_choices = set()
+   first_blank = True
+
+   latex_code = "\\begin{table}[ht]\n\\centering\n\\begin{tabular}{|"
+   latex_code += " |".join(['c' for _ in range(len(list[0])+1)])  # 'c' for centered columns
+   latex_code += " |}\n\\hline\n"
+    
+   # Add the header row
+   latex_code += "No. & Experiment  & Neg Value & Pos Value & Iteration & Accuracy \\\\ \\hline\n"
+   for i in range(min(60, len(list))):  # Make sure to not go beyond the available number of values
+    neg_value, pos_value, subdir, key, acc = list[i]
+    row =(str(i), parse_subdir(subdir), f"{neg_value:.5f}" , f"{pos_value:.5f}",  str(key),str(acc))
+    if i>20:
+       if row[1] in seen_choices:
+          if first_blank:
+             first_blank = False
+             latex_code += "..."+" & " + " & " +" & " +" & " +" & " + " \\\\ \\hline\n"
+          else:
+             continue
+       else:
+          latex_code += " & ".join(row) + " \\\\ \\hline\n"
+          
+    else:
+      latex_code += " & ".join(row) + " \\\\ \\hline\n"
+
+    seen_choices.add(row[1])
+
+    
+    # End the LaTeX table
+   if op == "n":
+      latex_code += "\\hline\n\\end{tabular}\n\\caption{Negative AUC}\n\\end{table}"
+   else:
+      latex_code += "\\hline\n\\end{tabular}\n\\caption{Positive AUC}\n\\end{table}"
+
+    
+   print(latex_code)
+   
+   
+  
 
 def parse_pert_results(pert_results_path, acc_keys):
     pos_values = {}
     neg_values = {}
+    pos_lists = {}    # New dictionary for transformer_attribution_pos lists
+    neg_lists = {} 
     
     for res_dir in os.listdir(pert_results_path):
         res_path = os.path.join(pert_results_path, res_dir)
@@ -117,8 +164,11 @@ def parse_pert_results(pert_results_path, acc_keys):
                 pert_data = json.load(f)
                 pos_values[res_key] = pert_data.get('transformer_attribution_pos_auc', 0)
                 neg_values[res_key] = pert_data.get('transformer_attribution_neg_auc', 0)
+
+                pos_lists[res_key] = pert_data.get('transformer_attribution_pos', [])
+                neg_lists[res_key] = pert_data.get('transformer_attribution_neg', [])
     
-    return pos_values, neg_values
+    return pos_values, neg_values, pos_lists, neg_lists
 
 
 
@@ -171,19 +221,36 @@ def filter_epochs(model, epoch):
    elif model == "norm_center_ablation":
       return epoch in [0,2]
    elif model == "norm_bias_ablation":
-      return epoch in [1,2,3,9,13,18,19,23,29]
+      return epoch in [13,18,29] #19,23, 1,2,3,9,
    elif model == "rmsnorm":
       return epoch in [0,1,2,3,9,13,18,19,23,29]
    elif model == "relu":
-      return epoch in [9, 14, 20, 31, 32, 33, 35, 45, 52, 71]
+      return epoch in [9, 14, 20, 31,  33, 35, 45, 52, 71] #32,
    elif model == "no_bias":
       return epoch in [59,58,56,54,44,47,40,37,33,32,29,26,23] 
    elif model == "rmsnorm_softplus":
-      return epoch in [59,58,50,48,46,44,40,35] # 22 26 28 29
+      return epoch in [78,79,73,60,59,58,50,48,46,44,40] # 22 26 28 29 59,58,50,48,46,44,40,35
 
    else:
-      return epoch in [14,12,16,18,29, 28, 26, 24, 22,10,8]
+      return epoch in [29, 28,] # 26, 24, 22,10,8, 14,12,16,18,
       
+
+
+def run_perturbations_env(args):
+   choices = [ "norm_bias_ablation", "relu",  "rmsnorm", "bias", "softplus", "rmsnorm_softplus",  ] #    args.ablated_component = None
+   args.variant           = None
+   run_perturbations(args)
+   for c in choices:
+      if c == "bias":
+         args.ablated_component = "bias"
+         args.variant = None
+         run_perturbations(args)
+      else:
+         args.variant = c
+         args.ablated_component = None
+         run_perturbations(args)
+
+
 
 
 def run_perturbations(args):
@@ -252,7 +319,7 @@ def generate_plots(dir_path):
     acc_dict = parse_acc_results(acc_results_path)
 
     pert_results_path = os.path.join(dir_path, 'pert_results')
-    pos_dict, neg_dict = parse_pert_results(pert_results_path, acc_dict.keys())
+    pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys())
 
     # Sort the keys (x-axis)
     sorted_keys = sorted(acc_dict.keys())
@@ -280,12 +347,13 @@ def generate_plots(dir_path):
 
 def parse_subdir(subdir):
    exp_name = subdir.split("/")[-1].rsplit('_', 1)[0]
+   exp_name = exp_name.replace("_"," ")
    exp_name = exp_name if exp_name != "none" else "basic"
    return exp_name
 
 
 def analyze(args):
-   choices = [ "relu", "none", "rmsnorm", "no_bias", "softplus", "rmsnorm_softplus", "norm_center_ablation", "norm_bias_ablation" ] #'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation'
+   choices = [ "relu", "none", "rmsnorm", "no_bias", "softplus", "rmsnorm_softplus",  ] #"norm_center_ablation", "norm_bias_ablation" , 'norm_ablation'
    root_dir = f'finetuned_models'
    
    if args.generate_plots:
@@ -304,14 +372,30 @@ def analyze(args):
    min_pos_subdir  = None
    min_pos_key     = None
 
+   best_exp        = {}
+
    for c in choices:
     subdir = f'{root_dir}/{c}_{args.data_set}'
     acc_results_path = os.path.join(subdir, 'acc_results.json')
     acc_dict = parse_acc_results(acc_results_path)
     pert_results_path = os.path.join(subdir, 'pert_results')
-    pos_dict, neg_dict = parse_pert_results(pert_results_path, acc_dict.keys())
+    pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys())
+    tmp_max_neg         = -float('inf')
+
     for key, neg_value in neg_dict.items():
        neg_list.append((neg_value, pos_dict[key], subdir, key, acc_dict[key]))
+       exp = parse_subdir(subdir)
+       if exp not in best_exp:
+          best_exp[exp] = neg_lists[key]
+          tmp_max_neg   = neg_value
+       else:
+          if neg_value > tmp_max_neg:
+             best_exp[exp] = neg_lists[key]
+             tmp_max_neg   = neg_value
+
+             
+          
+
        if neg_value > max_neg:
         pos_val = pos_dict[key]
         max_neg = neg_value
@@ -328,8 +412,8 @@ def analyze(args):
  
 
    neg_list.sort(reverse=True, key=lambda x: x[0])
-
    pos_list.sort(reverse=False, key=lambda x: x[0])
+   
 
    print(f"The subdir with the highest neg value is {max_neg_subdir}")
    print(f"Iter: {max_neg_key}, Neg Value: {max_neg}, Pos Value: {pos_val}")
@@ -342,13 +426,26 @@ def analyze(args):
     pos_value, neg_value, subdir, key, acc = pos_list[i]
     print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | POS AUC: {pos_value} | Neg AUC: {neg_value} | ACC1: {acc}")
 
+   if args.gen_latex:
+      gen_latex_table(list=neg_list,op = "n")
 
 
+   if args.generate_plots:
+      x_values = np.arange(0.1, 1.0, 0.1)
+      plt.figure(figsize=(8, 6))
+      for key, value in best_exp.items():
+         plt.plot(x_values, value, label=key) 
+      plt.legend()
+      plt.savefig(f'{root_dir}/plot.png')
 
 if __name__ == "__main__":
     args                   = parse_args()
+    
     if args.mode == "perturbations":
-       run_perturbations(args)
+       if args.check_all:
+          run_perturbations_env(args)
+       else: 
+         run_perturbations(args)
     else:
        analyze(args)
     
