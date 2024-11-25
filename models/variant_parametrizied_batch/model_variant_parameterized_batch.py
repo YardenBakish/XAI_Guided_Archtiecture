@@ -14,7 +14,7 @@ class RepBN(nn.Module):
     def __init__(self, channels):
         super(RepBN, self).__init__()
         self.alpha = nn.Parameter(torch.ones(1))
-        self.bn = BatchNorm1d(channels)
+        self.bn = BatchNorm1D(channels)
 
     def forward(self, x):
         x = x.transpose(1, 2)
