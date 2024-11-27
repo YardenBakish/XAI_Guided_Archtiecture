@@ -5,7 +5,7 @@ import math
 
 __all__ = ['forward_hook', 'Clone', 'Add', 'Cat', 'ReLU', 'GELU', 'Dropout', 'BatchNorm2d', 'Linear', 'MaxPool2d',
            'AdaptiveAvgPool2d', 'AvgPool2d', 'Conv2d', 'Sequential', 'safe_divide', 'einsum', 'Softmax', 'IndexSelect',
-           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid', 'SigmoidAttention']
+           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid', 'SigmoidAttention', 'ReluAttention']
 
 
 def safe_divide(a, b):
@@ -97,6 +97,20 @@ class SigmoidAttention(RelProp):
     
     def forward(self,x):
         return 1 / (1 + torch.exp(-(x + self.b)))
+
+
+class ReluAttention(nn.Module):
+    def __init__(self, n= 197):
+        super(ReluAttention, self).__init__()
+        self.seqlen = n ** -1
+        self.act_variant = ReLU()
+    
+    def forward(self,x):
+    
+        return self.act_variant(x) * self.seqlen
+    
+    def relprop(self, cam, **kwargs):
+        return self.act_variant.relprop(cam, **kwargs)
 
 
 class BatchNorm1D(nn.BatchNorm1d, RelProp):
@@ -318,7 +332,7 @@ class UncenteredLayerNorm(RelProp):
 
 
 
-    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True, bias=True, center=True):
+    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True, has_bias=True, center=True):
         super(UncenteredLayerNorm, self).__init__()
         
         if isinstance(normalized_shape, int):
@@ -326,12 +340,12 @@ class UncenteredLayerNorm(RelProp):
         self.normalized_shape = tuple(normalized_shape)
         self.eps = eps
         self.elementwise_affine = elementwise_affine
-        self.has_bias = bias
+        self.has_bias = has_bias
         self.has_center = center
         
         if self.elementwise_affine:
             self.weight = nn.Parameter(torch.empty(normalized_shape))
-            if bias:
+            if has_bias:
                 self.bias = nn.Parameter(torch.empty(normalized_shape))
             else:
                 self.register_parameter('bias', None)

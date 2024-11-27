@@ -2,6 +2,11 @@ import os
 import shutil
 import subprocess
 import re
+import numpy as np
+import torch
+import matplotlib.pyplot as plt
+from PIL import Image
+import cv2
 
 #helps to control a subset of the dataset for sanity checks
 # TODO:delete this file when no longer needed 
@@ -69,11 +74,29 @@ def get_sorted_checkpoints(directory):
 def create_dirs(path):
     os.makedirs(path,exist_ok=True)
 
+
+def create_image(path,i):
+    tensor_data = np.load(path)  # Shape: [1, 3, 224, 224]
+    print(tensor_data.shape)
+    tensor_data = tensor_data.squeeze(0)  # Now it should be [3, 224, 224]
+
+    image_data = np.transpose(tensor_data, (1, 2, 0))  # Now it's [224, 224, 3]
+
+    image_data = (image_data * 255).astype(np.uint8)
+    image_data = cv2.cvtColor(np.array(image_data), cv2.COLOR_RGB2BGR)
+    # Create a PIL image
+    image = Image.fromarray(image_data)
+
+    image.save(f"testing/pert_vis/image_{i}.png")
+
 # Example usage:
 source_directory = 'val'
 destination_directory = 'train'
 
 #move_directories(source_directory, destination_directory)
 
-x = get_sorted_checkpoints("finetuned_models/batchnorm/")
-print(x)
+#x = get_sorted_checkpoints("finetuned_models/batchnorm/")
+#print(x)
+
+for i in range(10):
+    create_image(f'testing/pert_vis/745/pert_{i}.npy',i)

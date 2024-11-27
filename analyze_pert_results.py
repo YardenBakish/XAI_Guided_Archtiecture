@@ -1,5 +1,5 @@
 import os
-
+import config
 import argparse
 import subprocess
 #import pandas as pd
@@ -11,6 +11,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description='evaluate perturbations')
     
     parser.add_argument('--mode', required=True, choices = ['perturbations', 'analyze'])
+    parser.add_argument('--normalized-pert', type=int, default=1, choices = [0,1])
+
+    parser.add_argument('--fract', type=float,
+                        default=0.1,
+                        help='')
+
     
     parser.add_argument('--pass-vis', action='store_true')
     parser.add_argument('--gen-latex', action='store_true')
@@ -32,7 +38,7 @@ def parse_args():
                         choices=['softmax', 'layerNorm', 'bias', 'softplus'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
+    parser.add_argument('--variant', default = 'basic',  type=str, help="")
     
    
     parser.add_argument('--neg', type=int, choices = [0,1], default = 0)
@@ -96,7 +102,7 @@ def parse_args():
                         default=False,
                         help='')
     parser.add_argument('--data-path', type=str,
-                        required=True,
+                  
                         help='')
     args = parser.parse_args()
     return args
@@ -144,7 +150,7 @@ def gen_latex_table(list=[],  op = ""):
    
   
 
-def parse_pert_results(pert_results_path, acc_keys):
+def parse_pert_results(pert_results_path, acc_keys, args):
     pos_values = {}
     neg_values = {}
     pos_lists = {}    # New dictionary for transformer_attribution_pos lists
@@ -158,6 +164,10 @@ def parse_pert_results(pert_results_path, acc_keys):
             
             if res_key not in acc_keys:
                 continue
+            
+            if args.normalized_pert == 0:
+               if "base" not in res_path:
+                  continue
             
             pert_results_file = os.path.join(res_path, 'pert_results.json')
             with open(pert_results_file, 'r') as f:
@@ -215,42 +225,17 @@ def get_sorted_checkpoints(directory):
 '''
 TEMPORARY! based on current accuarcy results
 '''
-def filter_epochs(model, epoch):
-   if model == "softplus":
-      return epoch in [33,34,40,45,46,49]
-   elif model == "norm_center_ablation":
-      return epoch in [0,2]
-   elif model == "norm_bias_ablation":
-      return epoch in [13,18,29] #19,23, 1,2,3,9,
-   elif model == "rmsnorm":
-      return epoch in [0,1,2,3,9,13,18,19,23,29]
-   elif model == "relu":
-      return epoch in [9, 14, 20, 31,  33, 35, 45, 52, 71] #32,
-   elif model == "no_bias":
-      return epoch in [59,58,56,54,44,47,40,37,33,32,29,26,23] 
-   elif model == "rmsnorm_softplus":
-      return epoch in [78,79,73,60,59,58,50,48,46,44,40] # 22 26 28 29 59,58,50,48,46,44,40,35
+def filter_epochs(args, epoch, variant):
+   return epoch in args.epochs_to_perturbate[variant]
 
-   else:
-      return epoch in [29, 28,] # 26, 24, 22,10,8, 14,12,16,18,
-      
 
 
 def run_perturbations_env(args):
-   choices = [ "norm_bias_ablation", "relu",  "rmsnorm", "bias", "softplus", "rmsnorm_softplus",  ] #    args.ablated_component = None
-   args.variant           = None
-   run_perturbations(args)
+   choices = args.epochs_to_perturbate.keys()
    for c in choices:
-      if c == "bias":
-         args.ablated_component = "bias"
-         args.variant = None
-         run_perturbations(args)
-      else:
-         args.variant = c
-         args.ablated_component = None
-         run_perturbations(args)
-
-
+      args.variant = c
+      run_perturbations(args)
+  
 
 
 def run_perturbations(args):
@@ -263,44 +248,39 @@ def run_perturbations(args):
    
  
     eval_pert_cmd       +=  f' --data-path {args.data_path}'
+    eval_pert_cmd       +=  f' --data-set {args.data_set}'
+
     eval_pert_cmd       +=  f' --batch-size {args.batch_size}'
     eval_pert_cmd       +=  f' --num-workers {args.num_workers}'
 
-    
-    root_dir = f'finetuned_models'
-    
-    if args.ablated_component:
-      if args.ablated_component != 'none' and args.variant:
-        print("does not support both a variant and ablation")
-        exit(1)
-    
+    eval_pert_cmd       +=  f' --normalized-pert {args.normalized_pert}'
+    eval_pert_cmd       +=  f' --fract {args.fract}'
 
-    if args.ablated_component == None and args.variant == None:
-       model = 'none'
+
+
     
-   
-    elif args.variant:
-       model          = f'{args.variant}'
-       eval_pert_cmd += f' --variant {args.variant}'
+    root_dir = f'{args.dirs['finetuned_models_dir']}{args.data_set}'
+    
+    variant          = f'{args.variant}'
+    eval_pert_cmd += f' --variant {args.variant}'
   
 
-    elif args.ablated_component :
-       model          = f'no_{args.ablated_component}'
-       eval_pert_cmd += f' --ablated-component {args.ablated_component}'
-
-    model_dir = f'{root_dir}/{model}_{args.data_set}'
+    model_dir = f'{root_dir}/{variant}'
 
     checkpoints =  get_sorted_checkpoints(model_dir)
 
-    count = 0
+
     for c in checkpoints:
      
        checkpoint_path  = c.split("/")[-1]
        epoch            = checkpoint_path.split(".")[0].split("_")[-1]
-       if filter_epochs(model, int(epoch)) == False:
+       if filter_epochs(args, int(epoch), variant ) == False:
           continue
        print(f"working on epoch {epoch}")
        eval_pert_epoch_cmd = f"{eval_pert_cmd} --output-dir {model_dir}/pert_results/res_{epoch}"
+       if args.normalized_pert == 0:
+          eval_pert_epoch_cmd+="_base"
+      
        eval_pert_epoch_cmd += f" --work-env {model_dir}/work_env/epoch{epoch}" 
        eval_pert_epoch_cmd += f" --custom-trained-model {model_dir}/{checkpoint_path}" 
        print(f'executing: {eval_pert_epoch_cmd}')
@@ -314,12 +294,12 @@ def run_perturbations(args):
 
 
 
-def generate_plots(dir_path):
+def generate_plots(dir_path,args):
     acc_results_path = os.path.join(dir_path, 'acc_results.json')
     acc_dict = parse_acc_results(acc_results_path)
 
     pert_results_path = os.path.join(dir_path, 'pert_results')
-    pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys())
+    pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys(),args)
 
     # Sort the keys (x-axis)
     sorted_keys = sorted(acc_dict.keys())
@@ -353,13 +333,17 @@ def parse_subdir(subdir):
 
 
 def analyze(args):
-   choices = [ "relu", "none", "rmsnorm", "no_bias", "softplus", "rmsnorm_softplus",  ] #"norm_center_ablation", "norm_bias_ablation" , 'norm_ablation'
-   root_dir = f'finetuned_models'
+   choices =  args.epochs_to_perturbate.keys() 
+   root_dir = f"{args.dirs['finetuned_models_dir']}{args.data_set}"
    
+
+   print(f"variants to consider: {choices}")
+   print(f"operating on : {root_dir}")
+
    if args.generate_plots:
       for c in choices:
-        subdir = f'{root_dir}/{c}_{args.data_set}'
-        generate_plots(subdir)
+        subdir = f'{root_dir}/{c}'
+        generate_plots(subdir,args)
    
    
    neg_list        = []
@@ -375,11 +359,11 @@ def analyze(args):
    best_exp        = {}
 
    for c in choices:
-    subdir = f'{root_dir}/{c}_{args.data_set}'
+    subdir = f'{root_dir}/{c}'
     acc_results_path = os.path.join(subdir, 'acc_results.json')
     acc_dict = parse_acc_results(acc_results_path)
     pert_results_path = os.path.join(subdir, 'pert_results')
-    pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys())
+    pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys(),args)
     tmp_max_neg         = -float('inf')
 
     for key, neg_value in neg_dict.items():
@@ -436,11 +420,12 @@ def analyze(args):
       for key, value in best_exp.items():
          plt.plot(x_values, value, label=key) 
       plt.legend()
-      plt.savefig(f'{root_dir}/plot.png')
+      plt.savefig(f'{root_dir}plot.png')
 
 if __name__ == "__main__":
     args                   = parse_args()
-    
+    config.get_config(args, skip_further_testing = True, get_epochs_to_perturbate = True)
+
     if args.mode == "perturbations":
        if args.check_all:
           run_perturbations_env(args)

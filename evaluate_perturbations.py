@@ -2,27 +2,33 @@ import os
 
 import argparse
 import subprocess
-
+import config
 
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='evaluate perturbations')
     parser.add_argument('--pass-vis', action='store_true')
+    parser.add_argument('--normalized-pert', type=int, default=1, choices = [0,1])
+
+    parser.add_argument('--fract', type=float,
+                        default=0.1,
+                        help='')
+
     
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
     
     parser.add_argument('--work-env', type=str,
-                    
+                        required= True,
                         help='')
     
     parser.add_argument('--ablated-component', type=str, 
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
+    parser.add_argument('--variant', default = 'basic', help="")
     
     parser.add_argument('--output-dir', type=str,
                         help='')
@@ -33,7 +39,7 @@ def parse_args():
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--num-workers', type=int,
-                        default= 2,
+                        default= 1,
                         help='')
     parser.add_argument('--method', type=str,
                         default='grad_rollout',
@@ -84,17 +90,22 @@ def parse_args():
     parser.add_argument('--no-reg', action='store_true',
                         default=False,
                         help='')
-    parser.add_argument('--is-ablation', type=bool,
-                        default=False,
-                        help='')
+
     parser.add_argument('--data-path', type=str,
-                        required=True,
+                   
                         help='')
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args                   = parse_args()
+
+    config.get_config(args, skip_further_testing = True)
+
+    if 'work_env' not in args.work_env:
+       print("work_env must be included in your --work-env arg")
+       exit(1)
+
     run_gen_vis_cmd        = "python generate_visualizations.py"
     run_gen_pert_cmd       = "python generate_perturbations.py"
     
@@ -102,65 +113,39 @@ if __name__ == "__main__":
     run_gen_pert_cmd      +=  f' --method {args.method}'
  
     run_gen_vis_cmd       +=  f' --data-path {args.data_path}'
+
+    run_gen_vis_cmd       +=  f' --data-set {args.data_set}'
+    run_gen_pert_cmd      +=  f' --data-set {args.data_set}'
+
     run_gen_vis_cmd       +=  f' --batch-size {args.batch_size}'
+    run_gen_pert_cmd      +=  f' --batch-size {args.batch_size}'
+
     run_gen_vis_cmd       +=  f' --num-workers {args.num_workers}'
     
-    
-    
-    
-    if args.ablated_component:
-      if args.ablated_component != 'none' and args.variant:
-        print("does not support both a variant and ablation")
-        exit(1)
-    
-    
-    if args.custom_trained_model:
-       print("WARNING: make sure your model fits the architecture")
-
-    if args.ablated_component == None and args.variant == None and args.custom_trained_model == None:
-       args.ablated_component = 'none'
-    
    
-
-    elif args.variant:
-       if args.output_dir == None:
-        args.output_dir   = f'finetuned_models/{args.variant}_{args.data_set}'
-       if args.custom_trained_model == None:
-        args.custom_trained_model = f'finetuned_models/{args.variant}_{args.data_set}/best_checkpoint.pth'
-      
-       run_gen_vis_cmd    +=  f' --variant {args.variant}'
-       run_gen_pert_cmd   +=  f' --variant {args.variant}'
+    run_gen_vis_cmd       +=  f' --variant {args.variant}'
+    run_gen_pert_cmd      +=  f' --variant {args.variant}'
    
-    elif args.ablated_component :
-       if args.output_dir == None:
-        args.output_dir   = f'finetuned_models/no_{args.ablated_component}_{args.data_set}'
-       if args.custom_trained_model == None:
-        args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}_{args.data_set}/best_checkpoint.pth'
+    run_gen_vis_cmd       +=  f' --custom-trained-model {args.custom_trained_model}'
+    run_gen_pert_cmd      +=  f' --custom-trained-model {args.custom_trained_model}'
 
 
-       run_gen_vis_cmd    +=  f' --ablated-component {args.ablated_component}'
-       run_gen_pert_cmd   +=  f' --ablated-component {args.ablated_component}'
-    else:
-      pass
+    run_gen_vis_cmd       +=  f' --work-env {args.work_env}'
+    run_gen_pert_cmd      +=  f'  --work-env {args.work_env}'
+
+    run_gen_vis_cmd       +=  f' --normalized-pert {args.normalized_pert}'
+    run_gen_vis_cmd       +=  f' --fract {args.fract}'
+
 
     
-    os.makedirs(args.output_dir, exist_ok=True)
-
-    if args.custom_trained_model:
-        run_gen_vis_cmd   +=  f' --custom-trained-model {args.custom_trained_model}'
-        run_gen_pert_cmd +=  f' --custom-trained-model {args.custom_trained_model}'
-      
-    if args.work_env:
-        if "work_env" not in args.work_env:
-           print("work_env must be in work env path")
-           exit(1)
-        os.makedirs(args.work_env, exist_ok=True)
-        run_gen_vis_cmd   +=  f' --work-env {args.work_env}'
-        run_gen_pert_cmd +=  f'  --work-env {args.work_env}'
-
+    
+    os.makedirs(args.work_env, exist_ok=True)
+    
     if args.output_dir:
-        run_gen_pert_cmd +=  f' --output-dir {args.output_dir}'
-    
+      os.makedirs(args.output_dir, exist_ok=True)
+      run_gen_pert_cmd +=  f' --output-dir {args.output_dir}'
+
+
        
     if args.pass_vis == False:
       try:
@@ -178,7 +163,6 @@ if __name__ == "__main__":
 
     else:
         run_gen_pert_cmd +=  f' --neg {args.neg}'
-       
        
     try:
       subprocess.run(run_gen_pert_cmd, check=True, shell=True)

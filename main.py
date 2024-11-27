@@ -9,7 +9,7 @@ import torch.backends.cudnn as cudnn
 import json
 import wandb
 from model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP
-from models.model_wrapper import model_env 
+from models.model_handler import model_env 
 
 import os
 
@@ -32,7 +32,7 @@ import deit.models as models
 import deit.models_v2 as models_v2
 
 import deit.utils as utils
-
+import config
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
@@ -43,7 +43,7 @@ def get_args_parser():
                         default='none',
                         choices=['none', 'softmax', 'layerNorm', 'bias'],)
     
-
+    parser.add_argument('--auto-start-train', action='store_true')
     parser.add_argument('--backup-interval', type=int,
                         default=2,)
     
@@ -51,13 +51,13 @@ def get_args_parser():
     parser.add_argument('--auto-resume',action='store_true',)
     parser.add_argument('--auto-save',action='store_true',)
     parser.add_argument('--is-ablation',action='store_true',)
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
+    parser.add_argument('--variant', default ='basic',  type=str, help="")
 
 
     
     parser.add_argument('--unscale-lr', action='store_true')
     parser.add_argument('--batch-size', default=64, type=int)
-    parser.add_argument('--epochs', default=300, type=int)
+    parser.add_argument('--epochs', default=30, type=int)
     parser.add_argument('--bce-loss', action='store_true')
     parser.add_argument('--verbose', action='store_true')
 
@@ -180,7 +180,7 @@ def get_args_parser():
     parser.add_argument('--attn-only', action='store_true') 
     
     # Dataset parameters
-    parser.add_argument('--data-path', default='/dataset', type=str,
+    parser.add_argument('--data-path',  type=str,
                         help='dataset path')
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -215,8 +215,9 @@ def get_args_parser():
 
 
 def main(args):
+    
+    config.get_config(args)
 
-   
 
     if args.is_ablation and args.variant:
         print(args.variant)
@@ -229,14 +230,14 @@ def main(args):
     if args.is_ablation:
         exp_name = "no_"+exp_name
 
-    exp_name += f'_{args.data_set}' 
+    exp_name += f'/{args.data_set}' 
     if args.auto_save:
-        results_exp_dir     = f'{args.results_dir}/{exp_name}'
-        create_directory_if_not_exists(f'{args.results_dir}/{exp_name}')
+        results_exp_dir     = f'{args.dirs["results_dir"]}/{exp_name}'
+        create_directory_if_not_exists(f'{args.dirs["results_dir"]}/{exp_name}')
         args.output_dir     = results_exp_dir
 
     if args.auto_resume:
-        results_exp_dir     = f'{args.results_dir}/{exp_name}'
+        results_exp_dir     = f'{args.dirs["results_dir"]}/{exp_name}'
         last_check_point    =  is_valid_directory(results_exp_dir)
         if last_check_point == False:
             print(f"problem with work enviroment {results_exp_dir}")
@@ -348,11 +349,8 @@ def main(args):
         ablated_component= args.ablated_component
     )'''
 
-    model = model_env(pretrained=False, 
-                      nb_classes=args.nb_classes,  
-                      ablated_component= args.ablated_component,
-                      variant = args.variant,
-             
+    model = model_env(args=args,
+                      hooks = False,
                       )
 
     

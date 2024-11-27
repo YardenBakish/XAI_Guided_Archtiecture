@@ -9,11 +9,14 @@ from sklearn.metrics import auc
 
 
 from model_ablation import deit_tiny_patch16_224 as vit_LRP
-from models.model_wrapper import model_env 
+
+#from models.model_wrapper import model_env 
+from models.model_handler import model_env 
 
 import glob
 
 from dataset.expl_hdf5 import ImagenetResults
+import config
 
 
 DEBUG_MAX_ITER = 2
@@ -47,7 +50,7 @@ def calc_auc(perturbation_steps,matt):
         
         means.append(row_mean)
     auc_score = auc(perturbation_steps, means)
-    
+    print(f"\n AUC: {auc_score}  | means: {means} \n")
     return {exp_name: means, f'{exp_name}_auc':auc_score} 
 
 def eval(args):
@@ -80,8 +83,7 @@ def eval(args):
  
     for batch_idx, (data, vis, target) in enumerate(tqdm(sample_loader)):
         
-       # print(f"BATCHHH: {batch_idx} \n\n")
-        #debug
+        print(f"\n\n REAL TARGET : {target}")
         if args.debug :
           if last_label == None or last_label != target:
               last_label   = target
@@ -104,7 +106,8 @@ def eval(args):
         pred_org_logit     = pred.data.max(1, keepdim=True)[0].squeeze(1)
         pred_org_prob      = pred_probabilities.data.max(1, keepdim=True)[0].squeeze(1)
         pred_class         = pred.data.max(1, keepdim=True)[1].squeeze(1)
-
+        print(f"PREDICTED CLASS (NO CHANGES) : {pred_class}")
+        
         tgt_pred           = (target == pred_class).type(target.type()).data.cpu().numpy()
         num_correct_model[model_index:model_index+len(tgt_pred)] = tgt_pred
 
@@ -164,6 +167,8 @@ def eval(args):
             logit_diff_pertub[i, perturb_index:perturb_index+len(diff)] = diff
 
             target_class = out.data.max(1, keepdim=True)[1].squeeze(1)
+            print(f"\tPREDICTED CLASS 0.{i} : {target_class}")
+
             temp = (target == target_class).type(target.type()).data.cpu().numpy()
 
             isCorrect =temp[0]
@@ -194,6 +199,7 @@ def eval(args):
     if args.output_dir:
         update_json(f"{args.output_dir}/pert_results.json", res)
 
+    
    
     #print(np.mean(num_correct_model), np.std(num_correct_model))
     #print(np.mean(dissimilarity_model), np.std(dissimilarity_model))
@@ -209,7 +215,7 @@ if __name__ == "__main__":
                         help='')
     
     parser.add_argument('--work-env', type=str,
-                    
+                        required = True,
                         help='')
     
     parser.add_argument('--output-dir', type=str,
@@ -224,7 +230,7 @@ if __name__ == "__main__":
                         choices=['softmax', 'layerNorm', 'bias'],)
     
     
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid' ], type=str, help="")
+    parser.add_argument('--variant', default = 'basic', help="")
     
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
@@ -258,7 +264,15 @@ if __name__ == "__main__":
     parser.add_argument('--is-ablation', type=bool,
                         default=False,
                         help='')
+    
+
+    parser.add_argument('--data-path', type=str,
+                     
+                        help='')
     args = parser.parse_args()
+
+
+    config.get_config(args, skip_further_testing = True)
 
     torch.multiprocessing.set_start_method('spawn')
 
@@ -318,9 +332,7 @@ if __name__ == "__main__":
             args.nb_classes = 1000
 
         model = model_env(pretrained=False, 
-                      nb_classes=args.nb_classes,  
-                      ablated_component= args.ablated_component,
-                      variant = args.variant,
+                      args = args,
                       hooks = True,
                     )
         #model_LRP.head = torch.nn.Linear(model.head.weight.shape[1],100)

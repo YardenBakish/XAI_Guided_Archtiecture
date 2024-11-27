@@ -1,15 +1,22 @@
 import os
 from tqdm import tqdm
 import h5py
-
+import config
 import argparse
+from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 # Import saliency methods and models
 from baselines.ViT.misc_functions import *
 #from dataset.label_index_corrector  import *
 from ViT_explanation_generator import Baselines, LRP
 from model_ablation import deit_tiny_patch16_224 as vit_LRP
-from models.model_wrapper import model_env 
+
+
+
+#from models.model_wrapper import model_env 
+from models.model_handler import model_env 
+
+
 
 from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 from deit.datasets import build_dataset
@@ -26,6 +33,13 @@ def normalize(tensor,
     std = torch.as_tensor(std, dtype=dtype, device=tensor.device)
     tensor.sub_(mean[None, :, None, None]).div_(std[None, :, None, None])
     return tensor
+
+
+noramlize2 = transforms.Compose([
+    #transforms.Resize(256, interpolation=3),
+    #transforms.CenterCrop(224),
+    transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)
+])
 
 
 def compute_saliency_and_save(args):
@@ -49,6 +63,10 @@ def compute_saliency_and_save(args):
                                        maxshape=(None,),
                                        dtype=np.int32,
                                        compression="gzip")
+        
+        
+        count_correct = 0 
+        
         for batch_idx, (data, target) in enumerate(tqdm(sample_loader)):
             
             
@@ -70,7 +88,11 @@ def compute_saliency_and_save(args):
 
             target = target.to(device)
 
-            data = normalize(data)
+            if args.normalized_pert:
+                data = normalize(data)
+            else:
+                data = noramlize2(data)
+
             data = data.to(device)
             data.requires_grad_()
 
@@ -79,6 +101,8 @@ def compute_saliency_and_save(args):
                 index = target
 
             if args.method == 'rollout':
+                print("FIXME: make sure which model is sent out for this method")
+                exit(1)
                 Res = baselines.generate_rollout(data, start_layer=1).reshape(data.shape[0], 1, 14, 14)
                 # Res = Res - Res.mean()
 
@@ -91,6 +115,11 @@ def compute_saliency_and_save(args):
           
 
                 print("attribution")
+                output = model_LRP(data)
+                print(f"target: {target}")
+                print(f"predicted:  {output.data.topk(5, dim=1)[1][0].tolist() }")
+                if output.data.topk(5, dim=1)[1][0].tolist()[0] == target:
+                    count_correct+=1 
                 Res = lrp.generate_LRP(data, start_layer=1, method="grad", index=index).reshape(data.shape[0], 1, 14, 14)
                 # Res = Res - Res.mean()
 
@@ -110,6 +139,8 @@ def compute_saliency_and_save(args):
                     .reshape(data.shape[0], 1, 14, 14)
 
             elif args.method == 'attn_gradcam':
+                print("FIXME: make sure which model is sent out for this method")
+                exit(1)
                 Res = baselines.generate_cam_attn(data, index=index).reshape(data.shape[0], 1, 14, 14)
 
             if args.method != 'full_lrp' and args.method != 'input_grads':
@@ -118,21 +149,27 @@ def compute_saliency_and_save(args):
 
             data_cam[-data.shape[0]:] = Res.data.cpu().numpy()
 
+        print(f"count_correct: {count_correct}") 
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a segmentation')
     parser.add_argument('--batch-size', type=int,
                         default=1,
                         help='')
+
+    parser.add_argument('--fract', type=float,
+                        default=0.1,
+                        help='')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
     parser.add_argument('--ablated-component', type=str,
                         choices=['softmax', 'layerNorm', 'bias'],)
     
-    parser.add_argument('--work-env', type=str,
-                    
-                        help='')
-    parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
+    parser.add_argument('--normalized-pert', type=int, default=1, choices = [0,1])
+
+    parser.add_argument('--work-env', type=str, help='', required = True)
+    parser.add_argument('--variant', default = 'basic', help="")
 
     parser.add_argument('--custom-trained-model', type=str,
                    
@@ -182,10 +219,15 @@ if __name__ == "__main__":
                         default=False,
                         help='')
     parser.add_argument('--data-path', type=str,
-                        required=True,
+                     
                         help='')
     args = parser.parse_args()
 
+    config.get_config(args, skip_further_testing = True)
+
+
+    size = int(args.input_size / args.eval_crop_ratio)
+    
     # PATH variables
     PATH = os.path.dirname(os.path.abspath(__file__)) + '/'
     if args.work_env:
@@ -229,18 +271,25 @@ if __name__ == "__main__":
             args.nb_classes = 1000
     
        
-        model_LRP = model_env(pretrained=False, 
+        '''model_LRP = model_env(pretrained=False, 
                       nb_classes=args.nb_classes,  
                       ablated_component= args.ablated_component,
                       variant = args.variant,
                       hooks = True,
+                    )'''
+        
+        model_LRP = model_env(pretrained=False, 
+                      args = args,
+                      hooks = True,
                     )
-        #model_LRP.head = torch.nn.Linear(model_LRP.head.weight.shape[1],100)
+        
         checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
 
         model_LRP.load_state_dict(checkpoint['model'], strict=False)
         model_LRP.to(device)
     else:
+        print("currently have to supply custom trained model")
+        exit(1)
         model_LRP = vit_LRP(pretrained=True).cuda()
     model_LRP.eval()
     lrp = LRP(model_LRP)
@@ -249,19 +298,37 @@ if __name__ == "__main__":
     ''' model_orig_LRP = vit_orig_LRP(pretrained=True).cuda()
     model_orig_LRP.eval()
     orig_lrp = LRP(model_orig_LRP)'''
-
+    size = int(args.input_size / args.eval_crop_ratio) 
     # Dataset loader for sample images
+
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize(size, interpolation=3),
+        transforms.CenterCrop(args.input_size), 
         transforms.ToTensor(),
     ])
-    dataset_val, _ = build_dataset(is_train=False, args=args)
+
+    dataset_val = None
+    if args.normalized_pert:
+        dataset_val, _ = build_dataset(is_train=False, args=args)
+    else:
+        if args.data_set == 'IMNET':
+            root = os.path.join(args.data_path,  'val')
+            dataset_val = datasets.ImageFolder(root, transform=transform)
+            nb_classes = 1000
+
+        elif args.data_set == 'IMNET100':
+            root = os.path.join(args.data_path,  'val')
+            dataset_val = datasets.ImageFolder(root, transform=transform)
+            nb_classes = 100
+
     
+   
+
     #random 0.4
     np.random.seed(42)
     total_size  = len(dataset_val)
     indices = list(range(total_size))
-    subset_size = int(total_size * 0.04)
+    subset_size = int(total_size *args.fract)
     random_indices = np.random.choice(indices, size=subset_size, replace=False)
     sampler = SubsetRandomSampler(random_indices)
 

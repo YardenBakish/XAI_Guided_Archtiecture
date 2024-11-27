@@ -1,24 +1,24 @@
-from model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP_no_hooks
-from model_ablation import deit_tiny_patch16_224 as vit_LRP
-from models.variant_relu.model_variant_relu_no_hooks import deit_tiny_patch16_224 as model_variant_relu_no_hooks
-from models.variant_relu.model_variant_relu import deit_tiny_patch16_224 as model_variant_relu
-from models.variant_batchnorm.model_variant_batchnorm_no_hooks import deit_tiny_patch16_224 as model_variant_batchnorm_no_hooks
-from models.variant_batchnorm.model_variant_batchnorm import deit_tiny_patch16_224 as model_variant_batchnorm
-from models.variant_rmsnorm.model_variant_rmsnorm_no_hooks import deit_tiny_patch16_224 as model_variant_rmsnorm_no_hooks
-from models.variant_rmsnorm.model_variant_rmsnorm import deit_tiny_patch16_224 as model_variant_rmsnorm
-from models.variant_softplus.model_variant_softplus_no_hooks import deit_tiny_patch16_224 as model_variant_softplus_no_hooks
-from models.variant_softplus.model_variant_softplus import deit_tiny_patch16_224 as model_variant_softplus
-from models.variant_rms_softplus.model_variant_rms_softplus_no_hooks import deit_tiny_patch16_224 as model_variant_rms_softplus_no_hooks
-from models.variant_rms_softplus.model_variant_rms_softplus import deit_tiny_patch16_224 as model_variant_rms_softplus
-from models.variant_norm_ablation.model_variant_norm_ablation_no_hooks import deit_tiny_patch16_224 as model_variant_norm_ablation_no_hooks
-from models.variant_norm_ablation.model_variant_norm_ablation import deit_tiny_patch16_224 as model_variant_norm_ablation
-from models.variant_sigmoid.model_variant_sigmoid_no_hooks import deit_tiny_patch16_224 as model_variant_sigmoid_no_hooks
-from models.variant_sigmoid.model_variant_sigmoid import deit_tiny_patch16_224 as model_variant_sigmoid
-
-from models.variant_parametrizied_batch.model_variant_parameterized_batch import deit_tiny_patch16_224_repbn as model_variant_batch_param
+from models.model import deit_tiny_patch16_224 as vit_LRP
 
 
-def model_env(pretrained=False, hooks = False, nb_classes = 100, ablated_component ="none", variant = None,  **kwargs):
+def model_env(pretrained=False,args  = None , hooks = False,  **kwargs):
+    
+    
+    print(args.model_components["isWithBias"])
+    print(args.model_components["norm"])
+    print(args.model_components["attn_activation"])
+    print(args.model_components["activation"])
+
+
+    return vit_LRP(
+        isWithBias      = args.model_components["isWithBias"],
+        layer_norm      = args.model_components["norm"],
+        last_norm       = args.model_components["last_norm"],
+
+        activation      = args.model_components["activation"],
+        attn_activation = args.model_components["attn_activation"],
+        num_classes     = args.nb_classes,
+    )
 
     if ablated_component:
         if ablated_component != "none" and variant!= None:

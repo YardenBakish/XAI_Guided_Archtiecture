@@ -99,7 +99,7 @@ if __name__ == "__main__":
                         choices=['none','softmax', 'layerNorm', 'bias'],)
     
   parser.add_argument('--norm-ablation', choices=['center', 'bias', 'all'], type=str, help="")
-  parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid'], type=str, help="")
+  parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid', 'batchnorm_param'], type=str, help="")
   parser.add_argument('--class-index', 
                        # default = "243",
                        type=int,
