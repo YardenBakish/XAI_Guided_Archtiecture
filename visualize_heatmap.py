@@ -1,4 +1,5 @@
-from models.model_wrapper import model_env 
+#from models.model_wrapper import model_env 
+from models.model_handler import model_env 
 
 from ViT_explanation_generator import LRP
 import torchvision.transforms as transforms
@@ -9,6 +10,8 @@ from samples.CLS2IDX import CLS2IDX
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import config
+
 import cv2
 normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 transform = transforms.Compose([
@@ -87,19 +90,17 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
 
   parser.add_argument('--sample-path', 
-                        default = "samples/catdog.png",
+                        required = True,
                         help='')
 
   parser.add_argument('--custom-trained-model', 
-                    
+                        required = True,
                         help='')
   parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],)
 
-  parser.add_argument('--ablated-component', type=str, 
-                        choices=['none','softmax', 'layerNorm', 'bias'],)
-    
-  parser.add_argument('--norm-ablation', choices=['center', 'bias', 'all'], type=str, help="")
-  parser.add_argument('--variant', choices=['rmsnorm', 'relu', 'batchnorm', 'softplus', 'rmsnorm_softplus', 'norm_bias_ablation', 'norm_center_ablation', 'norm_ablation', 'sigmoid', 'batchnorm_param'], type=str, help="")
+  parser.add_argument('--data-path', default='',)
+  
+  parser.add_argument('--variant', default = 'basic' , type=str, help="")
   parser.add_argument('--class-index', 
                        # default = "243",
                        type=int,
@@ -112,33 +113,20 @@ if __name__ == "__main__":
   
   
   args = parser.parse_args()
+  config.get_config(args, skip_further_testing = True, get_epochs_to_perturbate = True)
+
   image = Image.open(args.sample_path)
   image_transformed = transform(image)
 
-  num_classes = None
+  
   if args.data_set == "IMNET100":
-    num_classes = 100
+    args.nb_classes = 100
   else:
-      num_classes = 1000
+     args.nb_classes = 1000
 
-  if args.custom_trained_model == None:
-    if args.variant:
-         args.custom_trained_model = f'finetuned_models/{args.variant}_{args.data_set}/best_checkpoint.pth'
-
-    elif args.ablated_component :
-         args.custom_trained_model = f'finetuned_models/no_{args.ablated_component}_{args.data_set}/best_checkpoint.pth'
-    else:
-         args.ablated_component = "none"
-         args.custom_trained_model = f'finetuned_models/none_{args.data_set}/best_checkpoint.pth'
-      
-  else:
-      print("WARNING: make sure that your model fit the architecture!")
-
-
+  
   model = model_env(pretrained=False, 
-                      nb_classes=num_classes,  
-                      ablated_component= args.ablated_component,
-                      variant = args.variant,
+                      args = args,
                       hooks = True,
                     )
         #model_LRP.head = torch.nn.Linear(model_LRP.head.weight.shape[1],100)
@@ -165,13 +153,8 @@ if __name__ == "__main__":
     vis = generate_visualization_LRP(image_transformed, args.class_index)
     method_name = "lrp"
 
-  saved_image_path = f"testing/{img_name}_{method_name}"
-  if args.ablated_component:
-      saved_image_path+=f"abl_{args.ablated_component}.jpg"
-  elif args.variant:
-      saved_image_path+=f"var_{args.variant}.jpg"
-  else:
-      pass
+  saved_image_path = f"testing/{img_name}_{method_name}_{args.variant}.png"
+ 
   plt.imsave(saved_image_path, vis)
 
   

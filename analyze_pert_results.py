@@ -47,10 +47,10 @@ def parse_args():
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--num-workers', type=int,
-                        default= 2,
+                        default= 1,
                         help='')
     parser.add_argument('--method', type=str,
-                        default='grad_rollout',
+                        default='transformer_attribution',
                         choices=['rollout', 'lrp', 'transformer_attribution', 'full_lrp', 'lrp_last_layer',
                                  'attn_last_layer', 'attn_gradcam'],
                         help='')
@@ -259,7 +259,7 @@ def run_perturbations(args):
 
 
     
-    root_dir = f'{args.dirs['finetuned_models_dir']}{args.data_set}'
+    root_dir = f"{args.dirs['finetuned_models_dir']}{args.data_set}"
     
     variant          = f'{args.variant}'
     eval_pert_cmd += f' --variant {args.variant}'

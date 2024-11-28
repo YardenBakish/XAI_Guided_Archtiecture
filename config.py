@@ -33,20 +33,27 @@ MODEL_VARIANTS = {
             'norm_center_ablation':   {**DEFAULT_MODEL, 
                                        'norm': partial(UncenteredLayerNorm, eps=1e-6, center=False),
                                        'last_norm': partial(UncenteredLayerNorm,center=False)},
-            'norm_batch': '',  
-            'bias_ablation':          {**DEFAULT_MODEL, 'isWithBias': False} 
+            'norm_batch':             {**DEFAULT_MODEL, 'norm': RepBN,'last_norm' : RepBN},
+            'bias_ablation':          {**DEFAULT_MODEL, 'isWithBias': False,
+                                       
+                                       },
+
+
+             'attn_act_sparsemax':     {**DEFAULT_MODEL, 'attn_activation': Sparsemax(dim=-1)},
+
+
 }
 
 
 
 EPOCHS_TO_PERTURBATE = {
-            'basic':     [29, 28,26, 24, 22,10, 14,12,16,18]  ,          
+            'basic':     [29, 28,26, 24, 22,10, 14,12,16, 18]  ,          #, 
             'attn_act_relu':       [ 14, 20, 31,  33, 35, 45, 52, 71],    
             'act_softplus':       [33,34,40,45,46,49]   ,
             'act_softplus_norm_rms': [78,79,73,60,59,58,50,48,46,44,40],
-            #'norm_rms':              [0,1,2,3,9,13,18,19,23,29] ,
-            'norm_bias_ablation':    [13,19,23,18,19,29] ,
-            'bias_ablation':        [59,58,56,54,44,47,40,37,33,32]   
+            'norm_rms':              [13,0,1,2,3,9,13,18,19,23,29,] ,  #
+            'norm_bias_ablation':    [2, 13,19,23,18,19,29] ,
+            'bias_ablation':        [59,58,56,54,44,47,40,37,33,32]   #
 }
 
 
@@ -69,10 +76,9 @@ DEFAULT_PARAMETERS = {
     'warmup_epochs'          : 1
 }
 
-
-
 PRETRAINED_MODELS_URL = {
-    'deit_tiny_patch16_224': 'https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth'
+    'deit_tiny_patch16_224': 'finetuned_models/IMNET100/basic/best_checkpoint.pth'
+
 }
 
 

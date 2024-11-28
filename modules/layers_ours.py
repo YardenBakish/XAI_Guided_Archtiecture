@@ -1,11 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Function
+
 import math
 
 __all__ = ['forward_hook', 'Clone', 'Add', 'Cat', 'ReLU', 'GELU', 'Dropout', 'BatchNorm2d', 'Linear', 'MaxPool2d',
            'AdaptiveAvgPool2d', 'AvgPool2d', 'Conv2d', 'Sequential', 'safe_divide', 'einsum', 'Softmax', 'IndexSelect',
-           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid', 'SigmoidAttention', 'ReluAttention']
+           'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid', 'SigmoidAttention', 'ReluAttention',
+           'Sparsemax',
+           'RepBN']
 
 
 def safe_divide(a, b):
@@ -322,6 +326,39 @@ class Conv2d(nn.Conv2d, RelProp):
 
 
 
+class RepBN(nn.Module):
+    def __init__(self, normalized_shape):
+        super(RepBN, self).__init__()
+        self.alpha = nn.Parameter(torch.ones(1))
+        self.bn = BatchNorm1D(normalized_shape)
+        self.add = Add()
+        self.clone = Clone()
+
+    def forward(self, x):
+        x1, x2 = self.clone(x, 2)
+
+        x1 = x1.transpose(1, 2)
+        x2 = x2.transpose(1, 2)
+
+        x = self.add([self.bn(x1), self.alpha * x2])  
+
+        x = x.transpose(1, 2)
+
+        return x
+
+    def relprop(self, cam, **kwargs):
+        cam = cam.transpose(1,2)
+        (cam1, cam2) = self.add.relprop(cam, **kwargs)
+        cam2 /= self.alpha
+        cam1  = self.bn.relprop(cam, **kwargs)
+
+        cam1 = cam1.transpose(1,2)
+        cam2 = cam2.transpose(1,2)
+
+        cam = self.clone.relprop((cam1, cam2), **kwargs)
+
+        return cam
+
 
 
 class UncenteredLayerNorm(RelProp):
@@ -384,3 +421,105 @@ class UncenteredLayerNorm(RelProp):
         return '{normalized_shape}, eps={eps}, ' \
             'elementwise_affine={elementwise_affine}, ' \
             'bias={bias}'.format(**self.__dict__)
+    
+
+
+
+
+
+
+####################################################################
+## SPARSEMAX
+####################################################################
+
+
+def _make_ix_like(X, dim):
+    d = X.size(dim)
+    rho = torch.arange(1, d + 1, device=X.device, dtype=X.dtype)
+    view = [1] * X.dim()
+    view[0] = -1
+    return rho.view(view).transpose(0, dim)
+
+
+def _roll_last(X, dim):
+    if dim == -1:
+        return X
+    elif dim < 0:
+        dim = X.dim() - dim
+
+    perm = [i for i in range(X.dim()) if i != dim] + [dim]
+    return X.permute(perm)
+
+
+def _sparsemax_threshold_and_support(X, dim=-1, k=None):
+    if k is None or k >= X.shape[dim]:  # do full sort
+        topk, _ = torch.sort(X, dim=dim, descending=True)
+    else:
+        topk, _ = torch.topk(X, k=k, dim=dim)
+
+    topk_cumsum = topk.cumsum(dim) - 1
+    rhos = _make_ix_like(topk, dim)
+    support = rhos * topk > topk_cumsum
+
+    support_size = support.sum(dim=dim).unsqueeze(dim)
+    tau = topk_cumsum.gather(dim, support_size - 1)
+    tau /= support_size.to(X.dtype)
+
+    if k is not None and k < X.shape[dim]:
+        unsolved = (support_size == k).squeeze(dim)
+
+        if torch.any(unsolved):
+            in_ = _roll_last(X, dim)[unsolved]
+            tau_, ss_ = _sparsemax_threshold_and_support(in_, dim=-1, k=2 * k)
+            _roll_last(tau, dim)[unsolved] = tau_
+            _roll_last(support_size, dim)[unsolved] = ss_
+
+    return tau, support_size
+
+
+
+class SparsemaxFunction(Function):
+    @classmethod
+    def forward(cls, ctx, X, dim=-1, k=None):
+        ctx.dim = dim
+        max_val, _ = X.max(dim=dim, keepdim=True)
+        X = X - max_val  # same numerical stability trick as softmax
+        tau, supp_size = _sparsemax_threshold_and_support(X, dim=dim, k=k)
+        output = torch.clamp(X - tau, min=0)
+        ctx.save_for_backward(supp_size, output)
+        return output, supp_size
+
+    @classmethod
+    def backward(cls, ctx, grad_output, supp):
+        supp_size, output = ctx.saved_tensors
+        dim = ctx.dim
+        grad_input = grad_output.clone()
+        grad_input[output == 0] = 0
+
+        v_hat = grad_input.sum(dim=dim) / supp_size.to(output.dtype).squeeze(dim)
+        v_hat = v_hat.unsqueeze(dim)
+        grad_input = torch.where(output != 0, grad_input - v_hat, grad_input)
+        return grad_input, None, None, None
+
+
+
+def sparsemax(X, dim=-1, k=None, return_support_size=False):
+    P, support = SparsemaxFunction.apply(X, dim, k)
+    if return_support_size:
+        return P, support
+    return P
+
+
+
+
+class Sparsemax(RelProp):
+    def __init__(self, dim=-1, k=None, return_support_size=False):
+        self.dim = dim
+        self.k = k
+        self.return_support_size = return_support_size
+        super(Sparsemax, self).__init__()
+
+    def forward(self, X):
+        return sparsemax(X, dim=self.dim, k=self.k, return_support_size=self.return_support_size)
+
+

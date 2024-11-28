@@ -11,6 +11,7 @@ import wandb
 from model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP
 from models.model_handler import model_env 
 
+
 import os
 
 from pathlib import Path
@@ -230,7 +231,7 @@ def main(args):
     if args.is_ablation:
         exp_name = "no_"+exp_name
 
-    exp_name += f'/{args.data_set}' 
+    exp_name = f'{args.data_set}/{exp_name}' 
     if args.auto_save:
         results_exp_dir     = f'{args.dirs["results_dir"]}/{exp_name}'
         create_directory_if_not_exists(f'{args.dirs["results_dir"]}/{exp_name}')
@@ -364,7 +365,7 @@ def main(args):
         img_size=args.input_size,
     )'''
     
-    
+    model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
     #if args.nb_classes == 100:
     #    model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
 

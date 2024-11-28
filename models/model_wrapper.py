@@ -44,7 +44,7 @@ def model_env(pretrained=False, hooks = False, nb_classes = 100, ablated_compone
            # ablated_component= ablated_component
             )
         
-    if variant == "rmsnorm_softplus":
+    if variant == "act_softplus_norm_rms":
         if hooks:
             print(f"calling model RMSNorm-softplus with hooks: {hooks}")
 

@@ -51,7 +51,7 @@ python main.py --ablated-component bias --eval --auto-resume --results-dir finet
 # VARIANT
 
 #train variant
-python main.py --variant sigmoid --auto-save --results-dir finetuned_models   --finetune finetuned_models/none/best_checkpoint.pth  --model deit_tiny_patch16_224  --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8   --epochs 30  --data-path ./ --num_workers 4 --batch-size 128  --warmup-epochs 1
+python main.py --variant act_softplus_norm_rms --auto-save --results-dir finetuned_models   --finetune finetuned_models/IMNET/basic/best_checkpoint.pth  --model deit_tiny_patch16_224  --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8   --epochs 30  --data-path ./ --num_workers 4 --batch-size 128  --warmup-epochs 1
 
 
 #eval variant(same)
@@ -171,3 +171,7 @@ python evaluate_perturbations.py --work-env finetuned_models/batchnorm_IMNET1000
 python evaluate_perturbations.py --work-env finetuned_models/basic_IMNET100/work_env  --custom-trained-model finetuned_models/basic_IMNET100/deit_tiny_patch16_224-a1311bcf.pth --data-set IMNET  --method transformer_attribution --data-path /home/ai_center/ai_users/zimerman1/datasets/Imagenet/data/ --batch-size 1  --num-workers 1 --both --output-dir  finetuned_models/basic_IMNET100/pert_results/
 
 
+
+
+
+python main.py --variant attn_act_sparsemax --auto-start-train --model deit_tiny_patch16_224 --seed 0 --lr 5e-6 --min-lr 1e-5 --warmup-lr 1e-5 --drop-path 0.0 --weight-decay 1e-8 --epochs 30  --num_workers 4 --batch-size 128 --warmup-epochs 1
