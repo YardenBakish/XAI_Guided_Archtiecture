@@ -180,7 +180,7 @@ if __name__ == "__main__":
                         default= 2,
                         help='')
     parser.add_argument('--method', type=str,
-                        default='grad_rollout',
+                        default='transformer_attribution',
                         choices=['rollout', 'lrp', 'transformer_attribution', 'full_lrp', 'lrp_last_layer',
                                  'attn_last_layer', 'attn_gradcam'],
                         help='')

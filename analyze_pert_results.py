@@ -150,7 +150,7 @@ def gen_latex_table(list=[],  op = ""):
    
   
 
-def parse_pert_results(pert_results_path, acc_keys, args):
+def parse_pert_results(pert_results_path, acc_keys, args, op):
     pos_values = {}
     neg_values = {}
     pos_lists = {}    # New dictionary for transformer_attribution_pos lists
@@ -172,11 +172,11 @@ def parse_pert_results(pert_results_path, acc_keys, args):
             pert_results_file = os.path.join(res_path, 'pert_results.json')
             with open(pert_results_file, 'r') as f:
                 pert_data = json.load(f)
-                pos_values[res_key] = pert_data.get('transformer_attribution_pos_auc', 0)
-                neg_values[res_key] = pert_data.get('transformer_attribution_neg_auc', 0)
+                pos_values[res_key] = pert_data.get(f'transformer_attribution_pos_auc_{op}', 0)
+                neg_values[res_key] = pert_data.get(f'transformer_attribution_neg_auc_{op}', 0)
 
-                pos_lists[res_key] = pert_data.get('transformer_attribution_pos', [])
-                neg_lists[res_key] = pert_data.get('transformer_attribution_neg', [])
+                pos_lists[res_key] = pert_data.get(f'transformer_attribution_pos_{op}', [])
+                neg_lists[res_key] = pert_data.get(f'transformer_attribution_neg_{op}', [])
     
     return pos_values, neg_values, pos_lists, neg_lists
 
@@ -333,94 +333,96 @@ def parse_subdir(subdir):
 
 
 def analyze(args):
-   choices =  args.epochs_to_perturbate.keys() 
+   choices  =  args.epochs_to_perturbate.keys() 
    root_dir = f"{args.dirs['finetuned_models_dir']}{args.data_set}"
+   ops      = ["target", "top"] 
    
 
    print(f"variants to consider: {choices}")
    print(f"operating on : {root_dir}")
 
-   if args.generate_plots:
+   #if args.generate_plots:
+   #   for c in choices:
+   #     subdir = f'{root_dir}/{c}'
+   #     generate_plots(subdir,args)
+   
+   for op in ops:
+   
+      neg_list        = []
+      max_neg         = -float('inf')
+      max_neg_subdir  = None
+      max_neg_key     = None
+   
+      pos_list        = []
+      min_pos         = float('inf')
+      min_pos_subdir  = None
+      min_pos_key     = None
+
+      best_exp        = {}
+
       for c in choices:
-        subdir = f'{root_dir}/{c}'
-        generate_plots(subdir,args)
-   
-   
-   neg_list        = []
-   max_neg         = -float('inf')
-   max_neg_subdir  = None
-   max_neg_key     = None
-  
-   pos_list        = []
-   min_pos         = float('inf')
-   min_pos_subdir  = None
-   min_pos_key     = None
+       subdir = f'{root_dir}/{c}'
+       acc_results_path = os.path.join(subdir, 'acc_results.json')
+       acc_dict = parse_acc_results(acc_results_path)
+       pert_results_path = os.path.join(subdir, 'pert_results')
+       pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys(),args, op)
+       tmp_max_neg         = -float('inf')
 
-   best_exp        = {}
-
-   for c in choices:
-    subdir = f'{root_dir}/{c}'
-    acc_results_path = os.path.join(subdir, 'acc_results.json')
-    acc_dict = parse_acc_results(acc_results_path)
-    pert_results_path = os.path.join(subdir, 'pert_results')
-    pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys(),args)
-    tmp_max_neg         = -float('inf')
-
-    for key, neg_value in neg_dict.items():
-       neg_list.append((neg_value, pos_dict[key], subdir, key, acc_dict[key]))
-       exp = parse_subdir(subdir)
-       if exp not in best_exp:
-          best_exp[exp] = neg_lists[key]
-          tmp_max_neg   = neg_value
-       else:
-          if neg_value > tmp_max_neg:
+       for key, neg_value in neg_dict.items():
+          neg_list.append((neg_value, pos_dict[key], subdir, key, acc_dict[key]))
+          exp = parse_subdir(subdir)
+          if exp not in best_exp:
              best_exp[exp] = neg_lists[key]
              tmp_max_neg   = neg_value
+          else:
+             if neg_value > tmp_max_neg:
+                best_exp[exp] = neg_lists[key]
+                tmp_max_neg   = neg_value
 
-             
-          
 
-       if neg_value > max_neg:
-        pos_val = pos_dict[key]
-        max_neg = neg_value
-        max_neg_subdir = subdir
-        max_neg_key = key
 
-    for key, pos_value in pos_dict.items():
-       pos_list.append((pos_value, neg_dict[key], subdir, key, acc_dict[key] ))
-       if pos_value < min_pos:
-        neg_val = neg_dict[key]
-        min_pos = pos_value
-        min_pos_subdir = subdir
-        min_pos_key = key
- 
 
-   neg_list.sort(reverse=True, key=lambda x: x[0])
-   pos_list.sort(reverse=False, key=lambda x: x[0])
+          if neg_value > max_neg:
+           pos_val = pos_dict[key]
+           max_neg = neg_value
+           max_neg_subdir = subdir
+           max_neg_key = key
+
+       for key, pos_value in pos_dict.items():
+          pos_list.append((pos_value, neg_dict[key], subdir, key, acc_dict[key] ))
+          if pos_value < min_pos:
+           neg_val = neg_dict[key]
+           min_pos = pos_value
+           min_pos_subdir = subdir
+           min_pos_key = key
    
 
-   print(f"The subdir with the highest neg value is {max_neg_subdir}")
-   print(f"Iter: {max_neg_key}, Neg Value: {max_neg}, Pos Value: {pos_val}")
-   print("best pert score by negative perutrbations")
-   for i in range(min(60, len(neg_list))):  # Make sure to not go beyond the available number of values
-    neg_value, pos_value, subdir, key, acc = neg_list[i]
-    print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | Neg AUC: {neg_value} | POS AUC: {pos_value} | ACC1: {acc}")
-   print("\n\n")
-   for i in range(min(50, len(pos_list))):  # Make sure to not go beyond the available number of values
-    pos_value, neg_value, subdir, key, acc = pos_list[i]
-    print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | POS AUC: {pos_value} | Neg AUC: {neg_value} | ACC1: {acc}")
-
-   if args.gen_latex:
-      gen_latex_table(list=neg_list,op = "n")
+      neg_list.sort(reverse=True, key=lambda x: x[0])
+      pos_list.sort(reverse=False, key=lambda x: x[0])
 
 
-   if args.generate_plots:
-      x_values = np.arange(0.1, 1.0, 0.1)
-      plt.figure(figsize=(8, 6))
-      for key, value in best_exp.items():
-         plt.plot(x_values, value, label=key) 
-      plt.legend()
-      plt.savefig(f'{root_dir}plot.png')
+      print(f"The subdir with the highest neg value for{op} critertion is {max_neg_subdir}")
+      print(f"Iter: {max_neg_key}, Neg Value: {max_neg}, Pos Value: {pos_val}")
+      print("best pert score by negative perutrbations")
+      for i in range(min(60, len(neg_list))):  # Make sure to not go beyond the available number of values
+       neg_value, pos_value, subdir, key, acc = neg_list[i]
+       print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | Neg AUC: {neg_value} | POS AUC: {pos_value} | ACC1: {acc}")
+      print("\n\n")
+      for i in range(min(50, len(pos_list))):  # Make sure to not go beyond the available number of values
+       pos_value, neg_value, subdir, key, acc = pos_list[i]
+       print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | POS AUC: {pos_value} | Neg AUC: {neg_value} | ACC1: {acc}")
+
+      if args.gen_latex:
+         gen_latex_table(list=neg_list,op = "n")
+
+
+      if args.generate_plots:
+         x_values = np.arange(0.1, 1.0, 0.1)
+         plt.figure(figsize=(8, 6))
+         for key, value in best_exp.items():
+            plt.plot(x_values, value, label=key) 
+         plt.legend()
+         plt.savefig(f'{root_dir}plot_{op}.png')
 
 if __name__ == "__main__":
     args                   = parse_args()

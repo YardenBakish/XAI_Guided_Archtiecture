@@ -51,6 +51,7 @@ def compute_rollout_attention(all_layer_matrices, start_layer=0):
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, drop=0., isWithBias=True):
         super().__init__()
+        print(f"inside bias with isWithBias: {isWithBias}")
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.fc1 = Linear(in_features, hidden_features, bias = isWithBias)
@@ -148,7 +149,7 @@ class Attention(nn.Module):
         attn = self.attn_drop(attn)
 
         self.save_attn(attn)
-       # attn.register_hook(self.save_attn_gradients)
+        attn.register_hook(self.save_attn_gradients)
 
         out = self.matmul2([attn, v])
         out = rearrange(out, 'b h n d -> b n (h d)')
@@ -197,7 +198,7 @@ class Block(nn.Module):
             dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, ablated_component = ablated_component)
         self.norm2 = LayerNorm(dim, eps=1e-6, bias = isWithBias) if ablated_component != "layerNorm" else None
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, drop=drop, bias = isWithBias)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, drop=drop, isWithBias = isWithBias)
 
         self.add1 = Add()
         self.add2 = Add()
@@ -289,7 +290,7 @@ class VisionTransformer(nn.Module):
         self.norm = LayerNorm(embed_dim, bias = isWithBias) if ablated_component != "layerNorm" else None
         if mlp_head:
             # paper diagram suggests 'MLP head', but results in 4M extra parameters vs paper
-            self.head = Mlp(embed_dim, int(embed_dim * mlp_ratio), num_classes, isWithBias)
+            self.head = Mlp(embed_dim, int(embed_dim * mlp_ratio), num_classes, 0., isWithBias)
         else:
             # with a single Linear layer as head, the param count within rounding of paper
             self.head = Linear(embed_dim, num_classes, bias = isWithBias)
@@ -315,10 +316,11 @@ class VisionTransformer(nn.Module):
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
+            if isinstance(m, nn.Linear) and m.bias is not None and self.ablated_component != "bias":
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
+            if self.ablated_component != "bias":
+                nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
     @torch.jit.ignore
@@ -333,7 +335,7 @@ class VisionTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
         x = self.add([x, self.pos_embed])
 
-      #  x.register_hook(self.save_inp_grad)
+        x.register_hook(self.save_inp_grad)
 
         for blk in self.blocks:
             x = blk(x)

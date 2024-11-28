@@ -33,7 +33,7 @@ def normalize(tensor,
     return tensor
 
 
-def calc_auc(perturbation_steps,matt):
+def calc_auc(perturbation_steps,matt,op):
     means = []
     
     # Iterate through each row of the matrix
@@ -50,8 +50,8 @@ def calc_auc(perturbation_steps,matt):
         
         means.append(row_mean)
     auc_score = auc(perturbation_steps, means)
-    print(f"\n AUC: {auc_score}  | means: {means} \n")
-    return {exp_name: means, f'{exp_name}_auc':auc_score} 
+    print(f"\n {op}: AUC: {auc_score}  | means: {means} \n")
+    return {f'{exp_name}_{op}': means, f'{exp_name}_auc_{op}':auc_score} 
 
 def eval(args):
     
@@ -69,7 +69,9 @@ def eval(args):
     else:
         raise Exception('scale not valid')
 
-    correctence_precentage   = np.full((9,len(imagenet_ds)),-1)
+    correctence_target_precentage   = np.full((9,len(imagenet_ds)),-1)
+    correctence_top_precentage      = np.full((9,len(imagenet_ds)),-1)
+
 
     num_correct_pertub       = np.zeros((9, len(imagenet_ds)))
     dissimilarity_pertub     = np.zeros((9, len(imagenet_ds)))
@@ -167,9 +169,11 @@ def eval(args):
             logit_diff_pertub[i, perturb_index:perturb_index+len(diff)] = diff
 
             target_class = out.data.max(1, keepdim=True)[1].squeeze(1)
-            print(f"\tPREDICTED CLASS 0.{i} : {target_class}")
+            #print(f"\tPREDICTED CLASS 0.{i} : {target_class}")
 
             temp = (target == target_class).type(target.type()).data.cpu().numpy()
+
+            isCorrectOnInitPred = (pred_class == pred_class_pertubtated).type(target.type()).data.cpu().numpy()[0]
 
             isCorrect =temp[0]
           #  print(f'correct: {isCorrect}')
@@ -182,7 +186,8 @@ def eval(args):
             temp = torch.log(target_probs / second_probs).data.cpu().numpy()
             dissimilarity_pertub[i, perturb_index:perturb_index+len(temp)] = temp
             #print(i,batch_idx)
-            correctence_precentage[i,batch_idx] = isCorrect
+            correctence_target_precentage[i,batch_idx] = isCorrect
+            correctence_top_precentage[i,batch_idx]    = isCorrectOnInitPred
         model_index += len(target)
         perturb_index += len(target)
         
@@ -193,11 +198,15 @@ def eval(args):
     # np.save(os.path.join(args.experiment_dir, 'perturbations_logit_diff.npy'), logit_diff_pertub[:, :perturb_index])
     # np.save(os.path.join(args.experiment_dir, 'perturbations_prob_diff.npy'), prob_diff_pertub[:, :perturb_index])
     
-    print(correctence_precentage)
-    res = calc_auc(perturbation_steps,correctence_precentage)
- 
+    print(correctence_target_precentage)
+    res_target = calc_auc(perturbation_steps,correctence_target_precentage,"target")
+
+    print(correctence_top_precentage)
+    res_top = calc_auc(perturbation_steps,correctence_top_precentage,"top")
+    
+    res_top.update(res_target)
     if args.output_dir:
-        update_json(f"{args.output_dir}/pert_results.json", res)
+        update_json(f"{args.output_dir}/pert_results.json", res_top)
 
     
    
