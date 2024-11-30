@@ -98,13 +98,14 @@ class RMSNorm(nn.RMSNorm, RelProp):
 class Sigmoid(nn.Sigmoid, RelProp):
     pass
 
-class SigmoidAttention(RelProp):
+class SigmoidAttention(nn.Module):
     def __init__(self, n= 197):
         super(SigmoidAttention, self).__init__()
         self.b = -math.log(n)
+        self.act_variant = Sigmoid()
     
     def forward(self,x):
-        return 1 / (1 + torch.exp(-(x + self.b)))
+        return  self.act_variant(x + self.b)
 
 
 class ReluAttention(nn.Module):

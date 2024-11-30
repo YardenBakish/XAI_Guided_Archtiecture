@@ -1,520 +1,342 @@
-
-
-""" Vision Transformer (ViT) in PyTorch
-Hacked together by / Copyright 2020 Ross Wightman
-""" 
+import numpy as np
 import torch
-import torch.nn as nn
-from einops import rearrange
-from modules.layers_ours import *
-from baselines.ViT.weight_init import trunc_normal_
-from baselines.ViT.layer_helpers import to_2tuple
-from functools import partial
-import inspect
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from numpy import *
+import argparse
+from PIL import Image
+import imageio
+import os
+from tqdm import tqdm
+from utils.metrices import *
+from models.model_handler import vit_LRP 
 
-def safe_call(func, **kwargs):
-    # Get the function's signature
-    sig = inspect.signature(func)
+from utils import render
+from utils.saver import Saver
+from utils.iou import IoU
+
+from data.imagenet_new import Imagenet_Segmentation
+
+from ViT_explanation_generator import Baselines, LRP
+from model import deit_tiny_patch16_224 as vit_LRP
+
+
+from sklearn.metrics import precision_recall_curve
+import matplotlib.pyplot as plt
+
+import torch.nn.functional as F
+
+plt.switch_backend('agg')
+
+
+# hyperparameters
+num_workers = 0
+batch_size = 1
+
+cls = ['airplane',
+       'bicycle',
+       'bird',
+       'boat',
+       'bottle',
+       'bus',
+       'car',
+       'cat',
+       'chair',
+       'cow',
+       'dining table',
+       'dog',
+       'horse',
+       'motobike',
+       'person',
+       'potted plant',
+       'sheep',
+       'sofa',
+       'train',
+       'tv'
+       ]
+
+# Args
+parser = argparse.ArgumentParser(description='Training multi-class classifier')
+parser.add_argument('--arc', type=str, default='vgg', metavar='N',
+                    help='Model architecture')
+parser.add_argument('--train_dataset', type=str, default='imagenet', metavar='N',
+                    help='Testing Dataset')
+parser.add_argument('--method', type=str,
+                    default='grad_rollout',
+                    choices=[ 'rollout', 'lrp','transformer_attribution', 'full_lrp', 'lrp_last_layer',
+                              'attn_last_layer', 'attn_gradcam'],
+                    help='')
+parser.add_argument('--thr', type=float, default=0.,
+                    help='threshold')
+parser.add_argument('--K', type=int, default=1,
+                    help='new - top K results')
+parser.add_argument('--save-img', action='store_true',
+                    default=False,
+                    help='')
+parser.add_argument('--no-ia', action='store_true',
+                    default=False,
+                    help='')
+parser.add_argument('--no-fx', action='store_true',
+                    default=False,
+                    help='')
+parser.add_argument('--no-fgx', action='store_true',
+                    default=False,
+                    help='')
+parser.add_argument('--no-m', action='store_true',
+                    default=False,
+                    help='')
+parser.add_argument('--no-reg', action='store_true',
+                    default=False,
+                    help='')
+parser.add_argument('--is-ablation', type=bool,
+                    default=False,
+                    help='')
+parser.add_argument('--imagenet-seg-path', type=str, required=True)
+args = parser.parse_args()
+
+args.checkname = args.method + '_' + args.arc
+
+alpha = 2
+
+cuda = torch.cuda.is_available()
+device = torch.device("cuda" if cuda else "cpu")
+
+# Define Saver
+saver = Saver(args)
+saver.results_dir = os.path.join(saver.experiment_dir, 'results')
+if not os.path.exists(saver.results_dir):
+    os.makedirs(saver.results_dir)
+if not os.path.exists(os.path.join(saver.results_dir, 'input')):
+    os.makedirs(os.path.join(saver.results_dir, 'input'))
+if not os.path.exists(os.path.join(saver.results_dir, 'explain')):
+    os.makedirs(os.path.join(saver.results_dir, 'explain'))
+
+args.exp_img_path = os.path.join(saver.results_dir, 'explain/img')
+if not os.path.exists(args.exp_img_path):
+    os.makedirs(args.exp_img_path)
+args.exp_np_path = os.path.join(saver.results_dir, 'explain/np')
+if not os.path.exists(args.exp_np_path):
+    os.makedirs(args.exp_np_path)
+
+# Data
+normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+test_img_trans = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    normalize,
+])
+test_lbl_trans = transforms.Compose([
+    transforms.Resize((224, 224), Image.NEAREST),
+])
+
+ds = Imagenet_Segmentation(args.imagenet_seg_path,
+                           transform=test_img_trans, target_transform=test_lbl_trans)
+dl = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=False)
+
+# Model
+model = vit_LRP(pretrained=True).cuda()
+baselines = Baselines(model)
+
+# LRP
+model_LRP = vit_LRP(pretrained=True).cuda()
+model_LRP.eval()
+lrp = LRP(model_LRP)
+
+# orig LRP
+model_orig_LRP = vit_LRP(pretrained=True).cuda()
+model_orig_LRP.eval()
+orig_lrp = LRP(model_orig_LRP)
+
+metric = IoU(2, ignore_index=-1)
+
+iterator = tqdm(dl)
+
+model.eval()
+
+
+def compute_pred(output):
+    pred = output.data.max(1, keepdim=True)[1]  # get the index of the max log-probability
+    # pred[0, 0] = 282
+    # print('Pred cls : ' + str(pred))
+    T = pred.squeeze().cpu().numpy()
+    T = np.expand_dims(T, 0)
+    T = (T[:, np.newaxis] == np.arange(1000)) * 1.0
+    T = torch.from_numpy(T).type(torch.FloatTensor)
+    Tt = T.cuda()
+
+    return Tt
+
+
+def eval_batch(image, labels, evaluator, index):
+    evaluator.zero_grad()
+    # Save input image
+    if args.save_img:
+        img = image[0].permute(1, 2, 0).data.cpu().numpy()
+        img = 255 * (img - img.min()) / (img.max() - img.min())
+        img = img.astype('uint8')
+        Image.fromarray(img, 'RGB').save(os.path.join(saver.results_dir, 'input/{}_input.png'.format(index)))
+        Image.fromarray((labels.repeat(3, 1, 1).permute(1, 2, 0).data.cpu().numpy() * 255).astype('uint8'), 'RGB').save(
+            os.path.join(saver.results_dir, 'input/{}_mask.png'.format(index)))
+
+    image.requires_grad = True
+
+    image = image.requires_grad_()
+    predictions = evaluator(image)
     
-    # Filter kwargs to only include parameters the function accepts
-    filtered_kwargs = {
-        k: v for k, v in kwargs.items() 
-        if k in sig.parameters
-    }
+    # segmentation test for the rollout baseline
+    if args.method == 'rollout':
+        Res = baselines.generate_rollout(image.cuda(), start_layer=1).reshape(batch_size, 1, 14, 14)
     
-    # Call the function with only its compatible parameters
-    return func(**filtered_kwargs)
-
-
-def _cfg(url='', **kwargs):
-    return {
-        'url': url,
-        'num_classes': 1000, 'input_size': (3, 224, 224), 'pool_size': None,
-        'crop_pct': .9, 'interpolation': 'bicubic',
-        'first_conv': 'patch_embed.proj', 'classifier': 'head',
-        **kwargs
-    }
-
-
-default_cfgs = {
-    # patch models
-    'vit_small_patch16_224': _cfg(
-        url='https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-weights/vit_small_p16_224-15ec54c9.pth',
-    ),
-    'vit_base_patch16_224': _cfg(
-        url='https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-vitjx/jx_vit_base_p16_224-80ecf9dd.pth',
-        mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5),
-    ),
-    'vit_large_patch16_224': _cfg(
-        url='https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-vitjx/jx_vit_large_p16_224-4ee7a4dc.pth',
-        mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-}
-
-def compute_rollout_attention(all_layer_matrices, start_layer=0):
-    # adding residual consideration
-    num_tokens = all_layer_matrices[0].shape[1]
-    batch_size = all_layer_matrices[0].shape[0]
-    eye = torch.eye(num_tokens).expand(batch_size, num_tokens, num_tokens).to(all_layer_matrices[0].device)
-    all_layer_matrices = [all_layer_matrices[i] + eye for i in range(len(all_layer_matrices))]
-    # all_layer_matrices = [all_layer_matrices[i] / all_layer_matrices[i].sum(dim=-1, keepdim=True)
-    #                       for i in range(len(all_layer_matrices))]
-    joint_attention = all_layer_matrices[start_layer]
-    for i in range(start_layer+1, len(all_layer_matrices)):
-        joint_attention = all_layer_matrices[i].bmm(joint_attention)
-    return joint_attention
-
-class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, drop=0., isWithBias=True, activation = GELU):
-        super().__init__()
-        print(f"inside MLP with isWithBias: {isWithBias} and activation {activation}")
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = Linear(in_features, hidden_features, bias = isWithBias)
-        self.act = activation
-        self.fc2 = Linear(hidden_features, out_features, bias = isWithBias)
-        self.drop = Dropout(drop)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
-
-    def relprop(self, cam, **kwargs):
-        cam = self.drop.relprop(cam, **kwargs)
-        cam = self.fc2.relprop(cam, **kwargs)
-        cam = self.act.relprop(cam, **kwargs)
-        cam = self.fc1.relprop(cam, **kwargs)
-        return cam
-
-
-class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False,attn_drop=0., proj_drop=0., 
-       
-                attn_activation = Softmax(dim=-1), 
-                isWithBias      = True):
-        
-        super().__init__()
-
-        print(f"inside attention with activation : {attn_activation} | bias: {isWithBias} ")
-        self.num_heads = num_heads
-
-        head_dim = dim // num_heads
-        # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
-        self.scale = head_dim ** -0.5
-   
-
-        # A = Q*K^T
-        self.matmul1 = einsum('bhid,bhjd->bhij')
-        # attn = A*V
-        self.matmul2 = einsum('bhij,bhjd->bhid')
-
-        self.qkv = Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = Dropout(attn_drop)
-        self.proj = Linear(dim, dim, bias = isWithBias)
-        self.proj_drop = Dropout(proj_drop)
-        self.attn_activation = attn_activation
-
-        self.attn_cam = None
-        self.attn = None
-        self.v = None
-        self.v_cam = None
-        self.attn_gradients = None
-
-    def get_attn(self):
-        return self.attn
-
-    def save_attn(self, attn):
-        self.attn = attn
-
-    def save_attn_cam(self, cam):
-        self.attn_cam = cam
-
-    def get_attn_cam(self):
-        return self.attn_cam
-
-    def get_v(self):
-        return self.v
-
-    def save_v(self, v):
-        self.v = v
-
-    def save_v_cam(self, cam):
-        self.v_cam = cam
-
-    def get_v_cam(self):
-        return self.v_cam
-
-    def save_attn_gradients(self, attn_gradients):
-        self.attn_gradients = attn_gradients
-
-    def get_attn_gradients(self):
-        return self.attn_gradients
-
-    def forward(self, x):
-        b, n, _, h = *x.shape, self.num_heads
-        qkv = self.qkv(x)
-        q, k, v = rearrange(qkv, 'b n (qkv h d) -> qkv b h n d', qkv=3, h=h)
-
-        self.save_v(v)
-
-        dots = self.matmul1([q, k]) * self.scale
-       
-        attn = self.attn_activation(dots)
-        attn = self.attn_drop(attn)
-
-        self.save_attn(attn)
-        attn.register_hook(self.save_attn_gradients)
-
-        out = self.matmul2([attn, v])
-        out = rearrange(out, 'b h n d -> b n (h d)')
-
-        out = self.proj(out)
-        out = self.proj_drop(out)
-        return out
-
-    def relprop(self, cam, **kwargs):
-        cam = self.proj_drop.relprop(cam, **kwargs)
-        cam = self.proj.relprop(cam, **kwargs)
-        cam = rearrange(cam, 'b n (h d) -> b h n d', h=self.num_heads)
-
-        # attn = A*V
-        (cam1, cam_v)= self.matmul2.relprop(cam, **kwargs)
-        cam1 /= 2
-        cam_v /= 2
-
-        self.save_v_cam(cam_v)
-        self.save_attn_cam(cam1)
-
-        cam1 = self.attn_drop.relprop(cam1, **kwargs)
-      
-        cam1 = self.attn_activation.relprop(cam1, **kwargs)
-
-        # A = Q*K^T
-        (cam_q, cam_k) = self.matmul1.relprop(cam1, **kwargs)
-        cam_q /= 2
-        cam_k /= 2
-
-        cam_qkv = rearrange([cam_q, cam_k, cam_v], 'qkv b h n d -> b n (qkv h d)', qkv=3, h=self.num_heads)
-
-        return self.qkv.relprop(cam_qkv, **kwargs)
-
-
-class Block(nn.Module):
-
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,   
-                isWithBias = True,
-                layer_norm = partial(LayerNorm, eps=1e-6),
-                activation = GELU,
-                attn_activation = Softmax(dim=-1) ):
-        super().__init__()
-        print(f"Inside block with bias: {isWithBias} | norm : {layer_norm} | activation: {activation} | attn_activation: {attn_activation}  ")
-
-        self.norm1 = safe_call(layer_norm, normalized_shape= dim, bias = isWithBias ) 
-        self.attn = Attention(
-            dim, num_heads  = num_heads, 
-            qkv_bias        = qkv_bias, 
-            attn_drop       = attn_drop, 
-            proj_drop       = drop, 
-            attn_activation = attn_activation,
-            isWithBias      = isWithBias,
-           )
-        
-        self.norm2 = safe_call(layer_norm, normalized_shape= dim, bias = isWithBias ) 
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, 
-                       drop=drop, 
-                       isWithBias = isWithBias, 
-                       activation = activation)
-
-        
-        
-        self.gamma_1 = nn.Parameter(0.1 * torch.ones(dim))
-        self.gamma_2 = nn.Parameter(0.1 * torch.ones(dim))
-        
-        
-        self.add1 = Add()
-        self.add2 = Add()
-        self.clone1 = Clone()
-        self.clone2 = Clone()
-
+    # segmentation test for the LRP baseline (this is full LRP, not partial)
+    elif args.method == 'full_lrp':
+        Res = orig_lrp.generate_LRP(image.cuda(), method="full").reshape(batch_size, 1, 224, 224)
     
-
-    def forward(self, x):
-        x1, x2 = self.clone1(x, 2)
-      
-        x = self.add1([x1, self.gamma_1 *  self.attn(self.norm1(x2))])
-        x1, x2 = self.clone2(x, 2)
-      
-        x = self.add2([x1, self.gamma_2 *  self.mlp(self.norm2(x2))])
-        return x
-
-    def relprop(self, cam, **kwargs):
-        (cam1, cam2) = self.add2.relprop(cam, **kwargs)
-        cam2 = self.mlp.relprop(cam2, **kwargs)
-       
-        cam2 = self.norm2.relprop(cam2, **kwargs)
-        cam = self.clone2.relprop((cam1, cam2), **kwargs)
-
-        (cam1, cam2) = self.add1.relprop(cam, **kwargs)
-        cam2 = self.attn.relprop(cam2, **kwargs)
-      
-        cam2 = self.norm1.relprop(cam2, **kwargs)
-        cam = self.clone1.relprop((cam1, cam2), **kwargs)
-        return cam
-
-
-class PatchEmbed(nn.Module):
-    """ Image to Patch Embedding
-    """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768):
-        super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.num_patches = num_patches
-
-        self.proj = Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        # FIXME look at relaxing size constraints
-        assert H == self.img_size[0] and W == self.img_size[1], \
-            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj(x).flatten(2).transpose(1, 2)
-        return x
-
-    def relprop(self, cam, **kwargs):
-        cam = cam.transpose(1,2)
-        cam = cam.reshape(cam.shape[0], cam.shape[1],
-                     (self.img_size[0] // self.patch_size[0]), (self.img_size[1] // self.patch_size[1]))
-        return self.proj.relprop(cam, **kwargs)
-
-
-class VisionTransformer(nn.Module):
-    """ Vision Transformer with support for patch or hybrid CNN input stage
-    """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
-                 num_heads=12, mlp_ratio=4., qkv_bias=True, mlp_head=False, drop_rate=0., attn_drop_rate=0., 
-                isWithBias = True,
-                layer_norm = partial(LayerNorm, eps=1e-6),
-                activation = GELU,
-                attn_activation = Softmax(dim=-1),
-                last_norm       = LayerNorm,):
-        
-        super().__init__()
-        print(f"calling vision transformer with bias: {isWithBias} | norm : {layer_norm} | activation: {activation} | attn_activation: {attn_activation}  ")
-
-        self.num_classes = num_classes
-        self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
-        self.patch_embed = PatchEmbed(
-                img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
-        num_patches = self.patch_embed.num_patches
-        self.isWithBias = isWithBias
-
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.blocks = nn.ModuleList([
-            Block(
-                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
-                drop=drop_rate, attn_drop=attn_drop_rate,         
-           
-                isWithBias      = isWithBias, 
-                layer_norm      = layer_norm,
-                activation      = activation,
-                attn_activation = attn_activation,)
-            for i in range(depth)])
-
-        self.norm = safe_call(last_norm, normalized_shape= embed_dim, bias = isWithBias ) 
-        if mlp_head:
-            # paper diagram suggests 'MLP head', but results in 4M extra parameters vs paper
-            self.head = Mlp(embed_dim, int(embed_dim * mlp_ratio), num_classes, 0., isWithBias, activation)
-        else:
-            # with a single Linear layer as head, the param count within rounding of paper
-            self.head = Linear(embed_dim, num_classes, bias = isWithBias)
-
-        # FIXME not quite sure what the proper weight init is supposed to be,
-        # normal / trunc normal w/ std == .02 similar to other Bert like transformers
-        trunc_normal_(self.pos_embed, std=.02)  # embeddings same as weights?
-        trunc_normal_(self.cls_token, std=.02)
-        self.apply(self._init_weights)
-
-        self.pool = IndexSelect()
-        self.add = Add()
-
-        self.inp_grad = None
-
-    def save_inp_grad(self,grad):
-        self.inp_grad = grad
-
-    def get_inp_grad(self):
-        return self.inp_grad
-
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None and self.isWithBias != False:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            if self.isWithBias != False:
-                nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
-    @property
-    def no_weight_decay(self):
-        return {'pos_embed', 'cls_token'}
-
-    def forward(self, x):
-        B = x.shape[0]
-        x = self.patch_embed(x)
-
-        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-        x = torch.cat((cls_tokens, x), dim=1)
-        x = self.add([x, self.pos_embed])
-
-        x.register_hook(self.save_inp_grad)
-
-        for blk in self.blocks:
-            x = blk(x)
-     
-        x = self.norm(x)
-        x = self.pool(x, dim=1, indices=torch.tensor(0, device=x.device))
-        x = x.squeeze(1)
-        x = self.head(x)
-        return x
-
-    def relprop(self, cam=None,method="transformer_attribution", is_ablation=False, start_layer=0, **kwargs):
-        # print(kwargs)
-        # print("conservation 1", cam.sum())
-        cam = self.head.relprop(cam, **kwargs)
-        cam = cam.unsqueeze(1)
-        cam = self.pool.relprop(cam, **kwargs)
-     
-        cam = self.norm.relprop(cam, **kwargs)
-        for blk in reversed(self.blocks):
-            cam = blk.relprop(cam, **kwargs)
-
-        # print("conservation 2", cam.sum())
-        # print("min", cam.min())
-
-        if method == "full":
-            (cam, _) = self.add.relprop(cam, **kwargs)
-            cam = cam[:, 1:]
-            cam = self.patch_embed.relprop(cam, **kwargs)
-            # sum on channels
-            cam = cam.sum(dim=1)
-            return cam
-
-        elif method == "rollout":
-            # cam rollout
-            attn_cams = []
-            for blk in self.blocks:
-                attn_heads = blk.attn.get_attn_cam().clamp(min=0)
-                avg_heads = (attn_heads.sum(dim=1) / attn_heads.shape[1]).detach()
-                attn_cams.append(avg_heads)
-            cam = compute_rollout_attention(attn_cams, start_layer=start_layer)
-            cam = cam[:, 0, 1:]
-            return cam
-        
-        # our method, method name grad is legacy
-        elif method == "transformer_attribution" or method == "grad":
-            cams = []
-            for blk in self.blocks:
-                grad = blk.attn.get_attn_gradients()
-                cam = blk.attn.get_attn_cam()
-                cam = cam[0].reshape(-1, cam.shape[-1], cam.shape[-1])
-                grad = grad[0].reshape(-1, grad.shape[-1], grad.shape[-1])
-                cam = grad * cam
-                cam = cam.clamp(min=0).mean(dim=0)
-                cams.append(cam.unsqueeze(0))
-            rollout = compute_rollout_attention(cams, start_layer=start_layer)
-            cam = rollout[:, 0, 1:]
-            return cam
-            
-        elif method == "last_layer":
-            cam = self.blocks[-1].attn.get_attn_cam()
-            cam = cam[0].reshape(-1, cam.shape[-1], cam.shape[-1])
-            if is_ablation:
-                grad = self.blocks[-1].attn.get_attn_gradients()
-                grad = grad[0].reshape(-1, grad.shape[-1], grad.shape[-1])
-                cam = grad * cam
-            cam = cam.clamp(min=0).mean(dim=0)
-            cam = cam[0, 1:]
-            return cam
-
-        elif method == "last_layer_attn":
-            cam = self.blocks[-1].attn.get_attn()
-            cam = cam[0].reshape(-1, cam.shape[-1], cam.shape[-1])
-            cam = cam.clamp(min=0).mean(dim=0)
-            cam = cam[0, 1:]
-            return cam
-
-        elif method == "second_layer":
-            cam = self.blocks[1].attn.get_attn_cam()
-            cam = cam[0].reshape(-1, cam.shape[-1], cam.shape[-1])
-            if is_ablation:
-                grad = self.blocks[1].attn.get_attn_gradients()
-                grad = grad[0].reshape(-1, grad.shape[-1], grad.shape[-1])
-                cam = grad * cam
-            cam = cam.clamp(min=0).mean(dim=0)
-            cam = cam[0, 1:]
-            return cam
-
-
-
-
-def deit_base_patch16_224(pretrained=False, **kwargs):
-    model = VisionTransformer(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True, **kwargs)
-    model.default_cfg = _cfg()
-    if pretrained:
-        checkpoint = torch.hub.load_state_dict_from_url(
-            url="https://dl.fbaipublicfiles.com/deit/deit_base_patch16_224-b5f2ef4d.pth",
-            map_location="cpu", check_hash=True
-        )
-
-        #checkpoint = torch.load("deit_base_patch16_224-b5f2ef4d.pth", map_location="cpu")
-        #model.load_state_dict(checkpoint["model"])
-        model.load_state_dict(checkpoint["model"])
-    return model
-
-
-
-
-def deit_tiny_patch16_224(pretrained=False, 
-                          isWithBias = True,
-                          qkv_bias   = True,
-                          layer_norm = partial(LayerNorm, eps=1e-6),
-                          activation = GELU,
-                          attn_activation = Softmax(dim=-1) ,
-                          last_norm       = LayerNorm,
-                          **kwargs):
-
-    print(f"calling vision transformer with bias: {isWithBias} | norm : {layer_norm} | activation: {activation} | attn_activation: {attn_activation}  ")
-    model = VisionTransformer(
-        patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, 
-        qkv_bias        = isWithBias, 
-        isWithBias      = isWithBias, 
-        layer_norm      = layer_norm,
-        activation      = activation,
-        attn_activation = attn_activation,
-        last_norm       = last_norm,
-        **kwargs)
+    # segmentation test for our method
+    elif args.method == 'transformer_attribution':
+        Res = lrp.generate_LRP(image.cuda(), start_layer=1, method="transformer_attribution").reshape(batch_size, 1, 14, 14)
     
-    model.default_cfg = _cfg()
-    if pretrained:
-        checkpoint = torch.hub.load_state_dict_from_url(
-            url="https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth",
-            map_location="cpu", check_hash=True
-        )
-        model.load_state_dict(checkpoint["model"])
-    return model
+    # segmentation test for the partial LRP baseline (last attn layer)
+    elif args.method == 'lrp_last_layer':
+        Res = orig_lrp.generate_LRP(image.cuda(), method="last_layer", is_ablation=args.is_ablation)\
+            .reshape(batch_size, 1, 14, 14)
+    
+    # segmentation test for the raw attention baseline (last attn layer)
+    elif args.method == 'attn_last_layer':
+        Res = orig_lrp.generate_LRP(image.cuda(), method="last_layer_attn", is_ablation=args.is_ablation)\
+            .reshape(batch_size, 1, 14, 14)
+    
+    # segmentation test for the GradCam baseline (last attn layer)
+    elif args.method == 'attn_gradcam':
+        Res = baselines.generate_cam_attn(image.cuda()).reshape(batch_size, 1, 14, 14)
+
+    if args.method != 'full_lrp':
+        # interpolate to full image size (224,224)
+        Res = torch.nn.functional.interpolate(Res, scale_factor=16, mode='bilinear').cuda()
+    
+    # threshold between FG and BG is the mean    
+    Res = (Res - Res.min()) / (Res.max() - Res.min())
+
+    ret = Res.mean()
+
+    Res_1 = Res.gt(ret).type(Res.type())
+    Res_0 = Res.le(ret).type(Res.type())
+
+    Res_1_AP = Res
+    Res_0_AP = 1-Res
+
+    Res_1[Res_1 != Res_1] = 0
+    Res_0[Res_0 != Res_0] = 0
+    Res_1_AP[Res_1_AP != Res_1_AP] = 0
+    Res_0_AP[Res_0_AP != Res_0_AP] = 0
 
 
+    # TEST
+    pred = Res.clamp(min=args.thr) / Res.max()
+    pred = pred.view(-1).data.cpu().numpy()
+    target = labels.view(-1).data.cpu().numpy()
+    # print("target", target.shape)
 
+    output = torch.cat((Res_0, Res_1), 1)
+    output_AP = torch.cat((Res_0_AP, Res_1_AP), 1)
+
+    if args.save_img:
+        # Save predicted mask
+        mask = F.interpolate(Res_1, [64, 64], mode='bilinear')
+        mask = mask[0].squeeze().data.cpu().numpy()
+        # mask = Res_1[0].squeeze().data.cpu().numpy()
+        mask = 255 * mask
+        mask = mask.astype('uint8')
+        imageio.imsave(os.path.join(args.exp_img_path, 'mask_' + str(index) + '.jpg'), mask)
+
+        relevance = F.interpolate(Res, [64, 64], mode='bilinear')
+        relevance = relevance[0].permute(1, 2, 0).data.cpu().numpy()
+        # relevance = Res[0].permute(1, 2, 0).data.cpu().numpy()
+        hm = np.sum(relevance, axis=-1)
+        maps = (render.hm_to_rgb(hm, scaling=3, sigma=1, cmap='seismic') * 255).astype(np.uint8)
+        imageio.imsave(os.path.join(args.exp_img_path, 'heatmap_' + str(index) + '.jpg'), maps)
+
+    # Evaluate Segmentation
+    batch_inter, batch_union, batch_correct, batch_label = 0, 0, 0, 0
+    batch_ap, batch_f1 = 0, 0
+
+    # Segmentation resutls
+    correct, labeled = batch_pix_accuracy(output[0].data.cpu(), labels[0])
+    inter, union = batch_intersection_union(output[0].data.cpu(), labels[0], 2)
+    batch_correct += correct
+    batch_label += labeled
+    batch_inter += inter
+    batch_union += union
+    # print("output", output.shape)
+    # print("ap labels", labels.shape)
+    # ap = np.nan_to_num(get_ap_scores(output, labels))
+    ap = np.nan_to_num(get_ap_scores(output_AP, labels))
+    f1 = np.nan_to_num(get_f1_scores(output[0, 1].data.cpu(), labels[0]))
+    batch_ap += ap
+    batch_f1 += f1
+
+    return batch_correct, batch_label, batch_inter, batch_union, batch_ap, batch_f1, pred, target
+
+
+total_inter, total_union, total_correct, total_label = np.int64(0), np.int64(0), np.int64(0), np.int64(0)
+total_ap, total_f1 = [], []
+
+predictions, targets = [], []
+
+count = 20
+for batch_idx, (image, labels) in enumerate(iterator):
+
+    print(image.shape)
+    print(labels)
+    count+=1
+    if count >=20:
+        break
+
+    if args.method == "blur":
+        images = (image[0].cuda(), image[1].cuda())
+    else:
+        images = image.cuda()
+    labels = labels.cuda()
+    # print("image", image.shape)
+    # print("lables", labels.shape)
+
+    correct, labeled, inter, union, ap, f1, pred, target = eval_batch(images, labels, model, batch_idx)
+
+    predictions.append(pred)
+    targets.append(target)
+
+    total_correct += correct.astype('int64')
+    total_label += labeled.astype('int64')
+    total_inter += inter.astype('int64')
+    total_union += union.astype('int64')
+    total_ap += [ap]
+    total_f1 += [f1]
+    pixAcc = np.float64(1.0) * total_correct / (np.spacing(1, dtype=np.float64) + total_label)
+    IoU = np.float64(1.0) * total_inter / (np.spacing(1, dtype=np.float64) + total_union)
+    mIoU = IoU.mean()
+    mAp = np.mean(total_ap)
+    mF1 = np.mean(total_f1)
+    iterator.set_description('pixAcc: %.4f, mIoU: %.4f, mAP: %.4f, mF1: %.4f' % (pixAcc, mIoU, mAp, mF1))
+
+predictions = np.concatenate(predictions)
+targets = np.concatenate(targets)
+pr, rc, thr = precision_recall_curve(targets, predictions)
+np.save(os.path.join(saver.experiment_dir, 'precision.npy'), pr)
+np.save(os.path.join(saver.experiment_dir, 'recall.npy'), rc)
+
+plt.figure()
+plt.plot(rc, pr)
+plt.savefig(os.path.join(saver.experiment_dir, 'PR_curve_{}.png'.format(args.method)))
+
+txtfile = os.path.join(saver.experiment_dir, 'result_mIoU_%.4f.txt' % mIoU)
+# txtfile = 'result_mIoU_%.4f.txt' % mIoU
+fh = open(txtfile, 'w')
+print("Mean IoU over %d classes: %.4f\n" % (2, mIoU))
+print("Pixel-wise Accuracy: %2.2f%%\n" % (pixAcc * 100))
+print("Mean AP over %d classes: %.4f\n" % (2, mAp))
+print("Mean F1 over %d classes: %.4f\n" % (2, mF1))
+
+fh.write("Mean IoU over %d classes: %.4f\n" % (2, mIoU))
+fh.write("Pixel-wise Accuracy: %2.2f%%\n" % (pixAcc * 100))
+fh.write("Mean AP over %d classes: %.4f\n" % (2, mAp))
+fh.write("Mean F1 over %d classes: %.4f\n" % (2, mF1))
+fh.close()
