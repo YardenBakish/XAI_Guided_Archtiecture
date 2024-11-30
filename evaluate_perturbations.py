@@ -134,6 +134,8 @@ if __name__ == "__main__":
     run_gen_pert_cmd      +=  f'  --work-env {args.work_env}'
 
     run_gen_vis_cmd       +=  f' --normalized-pert {args.normalized_pert}'
+    run_gen_pert_cmd      +=  f' --normalized-pert {args.normalized_pert}'
+
     run_gen_vis_cmd       +=  f' --fract {args.fract}'
 
 

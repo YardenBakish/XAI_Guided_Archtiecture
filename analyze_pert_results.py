@@ -165,9 +165,8 @@ def parse_pert_results(pert_results_path, acc_keys, args, op):
             if res_key not in acc_keys:
                 continue
             
-            if args.normalized_pert == 0:
-               if "base" not in res_path:
-                  continue
+            if ((args.normalized_pert == 0 and "base" not in res_path) or (args.normalized_pert and "base" in res_path)):
+               continue
             
             pert_results_file = os.path.join(res_path, 'pert_results.json')
             with open(pert_results_file, 'r') as f:
@@ -326,7 +325,7 @@ def generate_plots(dir_path,args):
 
 
 def parse_subdir(subdir):
-   exp_name = subdir.split("/")[-1].rsplit('_', 1)[0]
+   exp_name = subdir.split("/")[-1]
    exp_name = exp_name.replace("_"," ")
    exp_name = exp_name if exp_name != "none" else "basic"
    return exp_name
@@ -336,7 +335,8 @@ def analyze(args):
    choices  =  args.epochs_to_perturbate.keys() 
    root_dir = f"{args.dirs['finetuned_models_dir']}{args.data_set}"
    ops      = ["target", "top"] 
-   
+   if args.normalized_pert == 0:
+      ops+=   ["target_blur", "top_blur"] 
 
    print(f"variants to consider: {choices}")
    print(f"operating on : {root_dir}")
@@ -401,7 +401,7 @@ def analyze(args):
       pos_list.sort(reverse=False, key=lambda x: x[0])
 
 
-      print(f"The subdir with the highest neg value for{op} critertion is {max_neg_subdir}")
+      print(f"The subdir with the highest neg value for {op} critertion is : {max_neg_subdir}")
       print(f"Iter: {max_neg_key}, Neg Value: {max_neg}, Pos Value: {pos_val}")
       print("best pert score by negative perutrbations")
       for i in range(min(60, len(neg_list))):  # Make sure to not go beyond the available number of values

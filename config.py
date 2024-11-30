@@ -39,27 +39,26 @@ MODEL_VARIANTS = {
                                        },
 
 
-             'attn_act_sparsemax':     {**DEFAULT_MODEL, 'attn_activation': Sparsemax(dim=-1)},
+            'attn_act_sparsemax':     {**DEFAULT_MODEL, 'attn_activation': Sparsemax(dim=-1)},
 
+
+            'attn_variant_light':       {**DEFAULT_MODEL,},
+            
 
 }
 
 
 
 EPOCHS_TO_PERTURBATE = {
-            'basic':     [29, 28,26, 24, 22,10, 14,12,16, 18 ]  ,          #, 
-            'attn_act_relu':       [ 14, 20, 31,  33, 35, 45, 52, 71],    
-            'act_softplus':       [49, 3,34,40,45,46,]   , # 3
-            'act_softplus_norm_rms': [78,79,73,], # 60,59,58,50,48,46,44,40
-            'norm_rms':              [13, 18,19,23,29, 13,1,2,3,9] ,  # 
-            'norm_bias_ablation':    [29, 2, 9, 13,19,23,18,19,] ,  #  
+            'basic':  [29, 28, 26, 24, 22,10, 14,12,16, 18 ]    ,       # []  ,          #, 
+            'attn_act_relu':       [ 70, 52, 71, 72,73,74,75],    # 14, 20, 31,  33, 35, 45,
+            'act_softplus':       [49, 48,45,46,]   , # 3 3,34 ,40
+            'act_softplus_norm_rms': [78,79,73,],                 #       60,59,58,50,48,46,44,40
+            'norm_rms':           [29,13, 18,19,23, 1,2,3,9],   # [] ,  # 
+            'norm_bias_ablation':    [29,26,27,28 ,2, 9, 13,19,23,18,] ,  #  
             'bias_ablation':        [56, 58,56,54,44,47,40,37,33,32, 59] ,  # 
-            'attn_act_sparsemax':   [69, ] # 67,68, 66
+            'attn_act_sparsemax':   [69, 68, 67 ] # , 66
 }
-
-
-
-
 
 
 

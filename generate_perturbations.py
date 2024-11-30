@@ -6,7 +6,7 @@ import argparse
 #from dataset.label_index_corrector import *
 from misc.helper_functions import *
 from sklearn.metrics import auc
-
+from torchvision.transforms import GaussianBlur
 
 from model_ablation import deit_tiny_patch16_224 as vit_LRP
 
@@ -53,7 +53,7 @@ def calc_auc(perturbation_steps,matt,op):
     print(f"\n {op}: AUC: {auc_score}  | means: {means} \n")
     return {f'{exp_name}_{op}': means, f'{exp_name}_auc_{op}':auc_score} 
 
-def eval(args):
+def eval(args, mode = None):
     
     num_samples          = 0
     num_correct_model    = np.zeros((len(imagenet_ds,)))
@@ -81,7 +81,7 @@ def eval(args):
     iter_count               = 0
    
     last_label               = None
-   
+    blur_transform = GaussianBlur(kernel_size=(51, 51), sigma=(20, 20))
  
     for batch_idx, (data, vis, target) in enumerate(tqdm(sample_loader)):
         
@@ -137,18 +137,36 @@ def eval(args):
         vis = vis.reshape(org_shape[0], -1)
 
         for i in range(len(perturbation_steps)):
-            _data = data.clone()
+            _data         = data.clone()
+            _data_blurred = data.clone()
+            blurred_data = blur_transform(data)
 
             _, idx = torch.topk(vis, int(base_size * perturbation_steps[i]), dim=-1)
             idx = idx.unsqueeze(1).repeat(1, org_shape[1], 1)
+
+
             _data = _data.reshape(org_shape[0], org_shape[1], -1)
+            _data_blurred = _data_blurred.reshape(org_shape[0], org_shape[1], -1)
+
+          
+
+
             _data = _data.scatter_(-1, idx, 0)
-            _data = _data.reshape(*org_shape)
+
+            _data_blurred = _data_blurred.scatter_(-1, idx, blurred_data.reshape(org_shape[0], org_shape[1], -1).gather(-1, idx))
             
+            _data = _data.reshape(*org_shape)
+            _data_blurred = _data_blurred.reshape(*org_shape)
+
+            if mode == "blur":
+                _data = _data_blurred
+
             #dbueg
             if args.debug:
                 os.makedirs(f'testing/pert_vis/{target.item()}', exist_ok=True)
-                np.save(f"testing/pert_vis/{target.item()}/pert_{i}",  _data.cpu().numpy())  
+                np.save(f"testing/pert_vis/{target.item()}/pert_{i}",  _data.cpu().numpy())
+                np.save(f"testing/pert_vis/{target.item()}/pert_black{i}",  _data_blurred.cpu().numpy())  
+
             
             _norm_data = normalize(_data)
 
@@ -199,10 +217,19 @@ def eval(args):
     # np.save(os.path.join(args.experiment_dir, 'perturbations_prob_diff.npy'), prob_diff_pertub[:, :perturb_index])
     
     print(correctence_target_precentage)
-    res_target = calc_auc(perturbation_steps,correctence_target_precentage,"target")
+
+    op1 = "target"
+    op2 = "top"
+
+    if mode:
+        op1+= f"_{mode}"
+        op2+= f"_{mode}"
+
+        
+    res_target = calc_auc(perturbation_steps,correctence_target_precentage,op1)
 
     print(correctence_top_precentage)
-    res_top = calc_auc(perturbation_steps,correctence_top_precentage,"top")
+    res_top = calc_auc(perturbation_steps,correctence_top_precentage,op2)
     
     res_top.update(res_target)
     if args.output_dir:
@@ -223,6 +250,10 @@ if __name__ == "__main__":
                         default=1,
                         help='')
     
+    parser.add_argument('--normalized-pert', type=int,
+                        default=1,
+                        choices = [0,1])
+
     parser.add_argument('--work-env', type=str,
                         required = True,
                         help='')
@@ -364,3 +395,7 @@ if __name__ == "__main__":
         shuffle=False)
 
     eval(args)
+    
+    if args.normalized_pert == 0:
+        eval(args, "blur")
+

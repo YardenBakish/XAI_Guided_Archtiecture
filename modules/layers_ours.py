@@ -9,7 +9,8 @@ __all__ = ['forward_hook', 'Clone', 'Add', 'Cat', 'ReLU', 'GELU', 'Dropout', 'Ba
            'AdaptiveAvgPool2d', 'AvgPool2d', 'Conv2d', 'Sequential', 'safe_divide', 'einsum', 'Softmax', 'IndexSelect',
            'LayerNorm', 'AddEye','BatchNorm1D' ,'RMSNorm' , 'Softplus', 'UncenteredLayerNorm', 'Sigmoid', 'SigmoidAttention', 'ReluAttention',
            'Sparsemax',
-           'RepBN']
+           'RepBN',
+           'SiLU']
 
 
 def safe_divide(a, b):
@@ -70,6 +71,9 @@ class AddEye(RelPropSimple):
         return input + torch.eye(input.shape[2]).expand_as(input).to(input.device)
 
 class ReLU(nn.ReLU, RelProp):
+    pass
+
+class SiLU(nn.SiLU, RelProp):
     pass
 
 class GELU(nn.GELU, RelProp):

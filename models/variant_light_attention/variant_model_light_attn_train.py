@@ -117,6 +117,8 @@ class Attention(nn.Module):
         self.proj_drop = Dropout(proj_drop)
         self.attn_activation = attn_activation
 
+        self.Q_activation  = SiLU()
+
         self.attn_cam = None
         self.attn = None
         self.v = None
@@ -158,15 +160,19 @@ class Attention(nn.Module):
         qkv = self.qkv(x)
         q, k, v = rearrange(qkv, 'b n (qkv h d) -> qkv b h n d', qkv=3, h=h)
 
+        
         self.save_v(v)
 
-        dots = self.matmul1([q, k]) * self.scale
+        q = self.Q_activation(q)
+        k = self.attn_activation(k)
+
+        attn = self.matmul1([q, k]) * self.scale
        
-        attn = self.attn_activation(dots)
+        #attn = self.attn_activation(dots)
         attn = self.attn_drop(attn)
 
         self.save_attn(attn)
-        attn.register_hook(self.save_attn_gradients)
+        #attn.register_hook(self.save_attn_gradients)
 
         out = self.matmul2([attn, v])
         out = rearrange(out, 'b h n d -> b n (h d)')
@@ -189,13 +195,16 @@ class Attention(nn.Module):
         self.save_attn_cam(cam1)
 
         cam1 = self.attn_drop.relprop(cam1, **kwargs)
-      
-        cam1 = self.attn_activation.relprop(cam1, **kwargs)
+
 
         # A = Q*K^T
         (cam_q, cam_k) = self.matmul1.relprop(cam1, **kwargs)
         cam_q /= 2
         cam_k /= 2
+
+        cam_q   = self.Q_activation.relprop(cam_q, **kwargs)
+        cam_k   = self.attn_activation.relprop(cam_k, **kwargs)
+
 
         cam_qkv = rearrange([cam_q, cam_k, cam_v], 'qkv b h n d -> b n (qkv h d)', qkv=3, h=self.num_heads)
 
@@ -230,12 +239,6 @@ class Block(nn.Module):
                        isWithBias = isWithBias, 
                        activation = activation)
 
-        
-        
-        self.gamma_1 = nn.Parameter(0.1 * torch.ones(dim))
-        self.gamma_2 = nn.Parameter(0.1 * torch.ones(dim))
-        
-        
         self.add1 = Add()
         self.add2 = Add()
         self.clone1 = Clone()
@@ -246,10 +249,10 @@ class Block(nn.Module):
     def forward(self, x):
         x1, x2 = self.clone1(x, 2)
       
-        x = self.add1([x1, self.gamma_1 *  self.attn(self.norm1(x2))])
+        x = self.add1([x1, self.attn(self.norm1(x2))])
         x1, x2 = self.clone2(x, 2)
       
-        x = self.add2([x1, self.gamma_2 *  self.mlp(self.norm2(x2))])
+        x = self.add2([x1, self.mlp(self.norm2(x2))])
         return x
 
     def relprop(self, cam, **kwargs):
@@ -366,7 +369,7 @@ class VisionTransformer(nn.Module):
                 nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    @property
+    @torch.jit.ignore
     def no_weight_decay(self):
         return {'pos_embed', 'cls_token'}
 
@@ -378,7 +381,7 @@ class VisionTransformer(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
         x = self.add([x, self.pos_embed])
 
-        x.register_hook(self.save_inp_grad)
+        #x.register_hook(self.save_inp_grad)
 
         for blk in self.blocks:
             x = blk(x)
