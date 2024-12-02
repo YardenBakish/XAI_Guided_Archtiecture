@@ -41,7 +41,8 @@ MODEL_VARIANTS = {
 
             'attn_act_sparsemax':     {**DEFAULT_MODEL, 'attn_activation': Sparsemax(dim=-1)},
 
-
+            'variant_layer_scale':       {**DEFAULT_MODEL,},
+            
             'attn_variant_light':       {**DEFAULT_MODEL,},
             
 
@@ -51,8 +52,8 @@ MODEL_VARIANTS = {
 
 EPOCHS_TO_PERTURBATE = {
             'basic':  [29, 28, 26, 24, 22,10, 14,12,16, 18 ]    ,       # []  ,          #, 
-            'attn_act_relu':       [ 70, 52, 71, 72,73,74,75],    # 14, 20, 31,  33, 35, 45,
-            'act_softplus':       [49, 48,45,46,]   , # 3 3,34 ,40
+            'attn_act_relu':       [ 70, 52, 71, 72,73,74,75, 20, 31,  33, 35, 45,],    # 14, 
+            'act_softplus':       [49, 48,45,46,34, 3]   , # 3 3,34 ,40
             'act_softplus_norm_rms': [78,79,73,],                 #       60,59,58,50,48,46,44,40
             'norm_rms':           [29,13, 18,19,23, 1,2,3,9],   # [] ,  # 
             'norm_bias_ablation':    [29,26,27,28 ,2, 9, 13,19,23,18,] ,  #  

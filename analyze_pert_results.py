@@ -108,43 +108,76 @@ def parse_args():
     return args
 
 
-def gen_latex_table(list=[],  op = ""):
+def gen_latex_table(global_top_mapper,args):
+
+   ops      = ["top", "target"] 
+   if args.normalized_pert == 0:
+      ops   =   ["top_blur", "target_blur" ] + ops
+
+
    # Start the LaTeX table
-   seen_choices = set()
-   first_blank = True
+   
+  
+   latex_code = r'\begin{table}[h!]\centering' + '\n' + r'\begin{tabular}{|c|c|c|c|c|c|c|c|c|}' + '\n'
+   latex_code += r'\hline' + '\n'
+   
+   header_row = ''
 
-   latex_code = "\\begin{table}[ht]\n\\centering\n\\begin{tabular}{|"
-   latex_code += " |".join(['c' for _ in range(len(list[0])+1)])  # 'c' for centered columns
-   latex_code += " |}\n\\hline\n"
+
+   a_values = ['']
+   if args.normalized_pert == 0:
+      a_values += ['_blur']
+   
+   b_values = ['neg_', 'pos_']
+   c_values = ['top', 'target']
+
+
+
+   x_values = ['Black']
+   if args.normalized_pert == 0:
+      x_values += ['Blur']
+   
+   y_values = ['Negative', 'Positive']
+   z_values = ['Predicted', 'Target']
+
+   for x in x_values:
+      header_row += f' & \\multicolumn{{4}}{{c|}}{{{x}}}'
+   header_row += r'\\ \hline' + '\n'
+
+
+   # Header for y and z values
+   subheader_row = ''
+   for x in x_values:
+      for y in y_values:
+         subheader_row += f' & \\multicolumn{{2}}{{c}}{{{y}}}'
+   subheader_row += r'\\ ' + '\n'
+
+
+       # Header for z values
+   subsubheader_row = ''
+   for x in x_values:
+      for y in y_values:
+         for z in z_values:
+            subsubheader_row += f' & \\multicolumn{{1}}{{c}}{{{z}}}'
+   subsubheader_row += r'\\ ' + '\n'
+
+
+   latex_code = latex_code + header_row + subheader_row + subsubheader_row
+
+
+   for experiment in global_top_mapper:
+      row = experiment
+      for a in a_values:
+         for b in b_values:
+            for c in c_values:
+              
+               row += f' & {global_top_mapper[experiment][b+c+a]:.5f}'
+               print(row)
+      row += r'\\ ' + '\n'
+      latex_code += row
     
-   # Add the header row
-   latex_code += "No. & Experiment  & Neg Value & Pos Value & Iteration & Accuracy \\\\ \\hline\n"
-   for i in range(min(60, len(list))):  # Make sure to not go beyond the available number of values
-    neg_value, pos_value, subdir, key, acc = list[i]
-    row =(str(i), parse_subdir(subdir), f"{neg_value:.5f}" , f"{pos_value:.5f}",  str(key),str(acc))
-    if i>20:
-       if row[1] in seen_choices:
-          if first_blank:
-             first_blank = False
-             latex_code += "..."+" & " + " & " +" & " +" & " +" & " + " \\\\ \\hline\n"
-          else:
-             continue
-       else:
-          latex_code += " & ".join(row) + " \\\\ \\hline\n"
-          
-    else:
-      latex_code += " & ".join(row) + " \\\\ \\hline\n"
-
-    seen_choices.add(row[1])
-
-    
-    # End the LaTeX table
-   if op == "n":
-      latex_code += "\\hline\n\\end{tabular}\n\\caption{Negative AUC}\n\\end{table}"
-   else:
-      latex_code += "\\hline\n\\end{tabular}\n\\caption{Positive AUC}\n\\end{table}"
-
-    
+   
+   latex_code += "\\hline\n\\end{tabular}\n\\caption{Positive AUC}\n\\end{table}"
    print(latex_code)
    
    
@@ -341,6 +374,8 @@ def analyze(args):
    print(f"variants to consider: {choices}")
    print(f"operating on : {root_dir}")
 
+   global_top_mapper = {}
+
    #if args.generate_plots:
    #   for c in choices:
    #     subdir = f'{root_dir}/{c}'
@@ -361,23 +396,37 @@ def analyze(args):
       best_exp        = {}
 
       for c in choices:
+
+
        subdir = f'{root_dir}/{c}'
        acc_results_path = os.path.join(subdir, 'acc_results.json')
        acc_dict = parse_acc_results(acc_results_path)
        pert_results_path = os.path.join(subdir, 'pert_results')
        pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys(),args, op)
        tmp_max_neg         = -float('inf')
+       exp = parse_subdir(subdir)
 
+
+       if exp not in global_top_mapper:
+          global_top_mapper[exp] = {}
+
+       
        for key, neg_value in neg_dict.items():
           neg_list.append((neg_value, pos_dict[key], subdir, key, acc_dict[key]))
-          exp = parse_subdir(subdir)
+          
           if exp not in best_exp:
              best_exp[exp] = neg_lists[key]
              tmp_max_neg   = neg_value
+             global_top_mapper[exp][f"neg_{op}"] = neg_value
+             global_top_mapper[exp][f"pos_{op}"] = pos_dict[key]
           else:
              if neg_value > tmp_max_neg:
                 best_exp[exp] = neg_lists[key]
                 tmp_max_neg   = neg_value
+
+                global_top_mapper[exp][f"neg_{op}"] = neg_value
+                global_top_mapper[exp][f"pos_{op}"] = pos_dict[key]
+
 
 
 
@@ -412,8 +461,7 @@ def analyze(args):
        pos_value, neg_value, subdir, key, acc = pos_list[i]
        print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | POS AUC: {pos_value} | Neg AUC: {neg_value} | ACC1: {acc}")
 
-      if args.gen_latex:
-         gen_latex_table(list=neg_list,op = "n")
+   
 
 
       if args.generate_plots:
@@ -423,6 +471,9 @@ def analyze(args):
             plt.plot(x_values, value, label=key) 
          plt.legend()
          plt.savefig(f'{root_dir}plot_{op}.png')
+   
+   if args.gen_latex:
+      gen_latex_table(global_top_mapper,args)
 
 if __name__ == "__main__":
     args                   = parse_args()

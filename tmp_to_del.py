@@ -9,17 +9,20 @@ import imageio
 import os
 from tqdm import tqdm
 from utils.metrices import *
-from models.model_handler import vit_LRP 
-
+from models.model_handler import model_env 
 from utils import render
 from utils.saver import Saver
 from utils.iou import IoU
-
+import config
 from data.imagenet_new import Imagenet_Segmentation
+
+from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+
 
 from ViT_explanation_generator import Baselines, LRP
 from model import deit_tiny_patch16_224 as vit_LRP
-
+import warnings
+warnings.filterwarnings("ignore")
 
 from sklearn.metrics import precision_recall_curve
 import matplotlib.pyplot as plt
@@ -59,6 +62,16 @@ cls = ['airplane',
 parser = argparse.ArgumentParser(description='Training multi-class classifier')
 parser.add_argument('--arc', type=str, default='vgg', metavar='N',
                     help='Model architecture')
+parser.add_argument('--custom-trained-model', type=str, 
+                    help='Model path')
+
+parser.add_argument('--variant', default = 'basic', help="")
+parser.add_argument('--input-size', default=224, type=int, help='images input size')
+
+parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
+
+parser.add_argument('--data-set', default='IMNET', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],)
+
 parser.add_argument('--train_dataset', type=str, default='imagenet', metavar='N',
                     help='Testing Dataset')
 parser.add_argument('--method', type=str,
@@ -91,8 +104,15 @@ parser.add_argument('--no-reg', action='store_true',
 parser.add_argument('--is-ablation', type=bool,
                     default=False,
                     help='')
+
+parser.add_argument('--data-path', type=str,
+                     
+                        help='')
 parser.add_argument('--imagenet-seg-path', type=str, required=True)
 args = parser.parse_args()
+
+config.get_config(args, skip_further_testing = True)
+
 
 args.checkname = args.method + '_' + args.arc
 
@@ -125,6 +145,19 @@ test_img_trans = transforms.Compose([
     transforms.ToTensor(),
     normalize,
 ])
+
+
+sizeX = int(args.input_size / args.eval_crop_ratio)
+
+transform2 = transforms.Compose([
+        transforms.Resize(sizeX, interpolation=3),
+        transforms.CenterCrop(args.input_size), 
+        transforms.ToTensor(),
+        transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)
+])
+
+
+
 test_lbl_trans = transforms.Compose([
     transforms.Resize((224, 224), Image.NEAREST),
 ])
@@ -137,8 +170,23 @@ dl = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=1, drop_la
 model = vit_LRP(pretrained=True).cuda()
 baselines = Baselines(model)
 
-# LRP
-model_LRP = vit_LRP(pretrained=True).cuda()
+if args.custom_trained_model != None:
+    if args.data_set == 'IMNET100':
+        args.nb_classes = 100
+    else:
+        args.nb_classes = 1000
+      
+    model_LRP = model_env(pretrained=False, 
+                    args = args,
+                    hooks = True,
+                )
+    
+    checkpoint = torch.load(args.custom_trained_model, map_location='cpu')
+
+    model_LRP.load_state_dict(checkpoint['model'], strict=False)
+    model_LRP.to(device)
+
+
 model_LRP.eval()
 lrp = LRP(model_LRP)
 
@@ -282,14 +330,11 @@ total_ap, total_f1 = [], []
 
 predictions, targets = [], []
 
-count = 20
+count = 0
 for batch_idx, (image, labels) in enumerate(iterator):
 
-    print(image.shape)
-    print(labels)
-    count+=1
-    if count >=20:
-        break
+
+    
 
     if args.method == "blur":
         images = (image[0].cuda(), image[1].cuda())
@@ -340,3 +385,10 @@ fh.write("Pixel-wise Accuracy: %2.2f%%\n" % (pixAcc * 100))
 fh.write("Mean AP over %d classes: %.4f\n" % (2, mAp))
 fh.write("Mean F1 over %d classes: %.4f\n" % (2, mF1))
 fh.close()
+
+
+
+
+
+
+
