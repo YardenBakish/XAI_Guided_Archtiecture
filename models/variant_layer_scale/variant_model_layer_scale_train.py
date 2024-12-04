@@ -232,8 +232,8 @@ class Block(nn.Module):
 
         
         
-        self.gamma_1 = nn.Parameter(0.1 * torch.ones(dim))
-        self.gamma_2 = nn.Parameter(0.1 * torch.ones(dim))
+        self.gamma_1 = nn.Parameter(0.1 * torch.ones((dim)))
+        self.gamma_2 = nn.Parameter(0.1* torch.ones((dim)))
         
         
         self.add1 = Add()
@@ -245,7 +245,7 @@ class Block(nn.Module):
 
     def forward(self, x):
         x1, x2 = self.clone1(x, 2)
-      
+     
         x = self.add1([x1, self.gamma_1 *  self.attn(self.norm1(x2))])
         x1, x2 = self.clone2(x, 2)
       

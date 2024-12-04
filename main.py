@@ -46,7 +46,7 @@ def get_args_parser():
     
     parser.add_argument('--auto-start-train', action='store_true')
     parser.add_argument('--backup-interval', type=int,
-                        default=2,)
+                        default=3,)
     
     parser.add_argument('--results-dir',type=str)
     parser.add_argument('--auto-resume',action='store_true',)
@@ -576,7 +576,7 @@ def main(args):
         print("managed to finsh training")
 
         lr_scheduler.step(epoch)
-        if args.output_dir: #and (epoch %args.backup_interval == 0):
+        if args.output_dir and (epoch %args.backup_interval == 0):
             checkpoint_paths = [output_dir / f'checkpoint_{epoch}.pth']
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
