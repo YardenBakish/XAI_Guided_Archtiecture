@@ -20,47 +20,47 @@ DEFAULT_PATHS = {
 
 
 MODEL_VARIANTS = {
-            'basic':                  DEFAULT_MODEL.copy(),
-            'attn_act_relu':          {**DEFAULT_MODEL, 'attn_activation': ReluAttention()},
-            'attn_act_sigmoid':       {**DEFAULT_MODEL, 'attn_activation': SigmoidAttention()},
-            'act_softplus':           {**DEFAULT_MODEL, 'activation': Softplus()},
-
+            'basic'                :  DEFAULT_MODEL.copy(),
+            'bias_ablation'        :  {**DEFAULT_MODEL, 'isWithBias': False, },
+            #Attention Activation Variants
+            'attn_act_relu'        :  {**DEFAULT_MODEL, 'attn_activation': ReluAttention()},
+            'attn_act_sigmoid'     :  {**DEFAULT_MODEL, 'attn_activation': SigmoidAttention()},
+            'attn_act_sparsemax'   :  {**DEFAULT_MODEL, 'attn_activation': Sparsemax(dim=-1)},
+            'attn_variant_light'   :  {**DEFAULT_MODEL,},
+            #Activation Variants
+            'act_softplus'         :  {**DEFAULT_MODEL, 'activation': Softplus()},
+            #Normalization Variants
             'act_softplus_norm_rms':  {**DEFAULT_MODEL, 'activation': Softplus(), 'norm': partial(RMSNorm, eps=1e-6), 'last_norm': RMSNorm },
-            'norm_rms':               {**DEFAULT_MODEL, 'norm': partial(RMSNorm, eps=1e-6), 'last_norm': RMSNorm },
-            'norm_bias_ablation':     {**DEFAULT_MODEL, 
-                                       'norm': partial(UncenteredLayerNorm, eps=1e-6, has_bias=False), 
+            'norm_rms'             :  {**DEFAULT_MODEL, 'norm': partial(RMSNorm, eps=1e-6), 'last_norm': RMSNorm },
+            'norm_bias_ablation'   :  {**DEFAULT_MODEL, 'norm': partial(UncenteredLayerNorm, eps=1e-6, has_bias=False), 
                                        'last_norm': partial(UncenteredLayerNorm,has_bias=False)},
-            'norm_center_ablation':   {**DEFAULT_MODEL, 
-                                       'norm': partial(UncenteredLayerNorm, eps=1e-6, center=False),
+            'norm_center_ablation' :  {**DEFAULT_MODEL, 'norm': partial(UncenteredLayerNorm, eps=1e-6, center=False),
                                        'last_norm': partial(UncenteredLayerNorm,center=False)},
-            'norm_batch':             {**DEFAULT_MODEL, 'norm': RepBN,'last_norm' : RepBN},
-            'bias_ablation':          {**DEFAULT_MODEL, 'isWithBias': False,
-                                       
-                                       },
+            'norm_batch'           :  {**DEFAULT_MODEL, 'norm': RepBN,'last_norm' : RepBN},
 
+            #Special Variants
+            'variant_layer_scale':              {**DEFAULT_MODEL,},
+            'variant_diff_attn':                {**DEFAULT_MODEL,},
+            'variant_weight_normalization':     {**DEFAULT_MODEL,},
 
-            'attn_act_sparsemax':     {**DEFAULT_MODEL, 'attn_activation': Sparsemax(dim=-1)},
-
-            'variant_layer_scale':       {**DEFAULT_MODEL,},
-            
-            'attn_variant_light':       {**DEFAULT_MODEL,},
             
 
 }
 
 
-
+#chosen randmoly
 EPOCHS_TO_PERTURBATE = {
-            'basic':  [29, 28, 26, 24, 22,10, 14,12,16, 18 ]    ,       # []  ,          #, 
-            'attn_act_relu':       [ 70, 52, 71, 72,73,74,75, 20, 31,  33, 35, 45,],    # 14, 
-            'act_softplus':       [49, 48,45,46,34, 3]   , # 3 3,34 ,40
+            'basic':  [29, 28, 26,  ]    ,       # 22,10, 14,12,16, 18  24,
+            'attn_act_relu':       [ 70, 52, 71, 72,73,74,75,  31,  33, 35, 45,],    # 14, 20,
+            'act_softplus':       [49, 48,45,46,34, 3]   , # 3 34 ,40
             'act_softplus_norm_rms': [78,79,73,],                 #       60,59,58,50,48,46,44,40
-            'norm_rms':           [29,13, 18,19,23, 1,2,3,9],   # [] ,  # 
+            'norm_rms':           [29,13, 18,19,23, 9],   # 1,2,3,
             'norm_bias_ablation':    [29,26,27,28 ,2, 9, 13,19,23,18,] ,  #  
-            'bias_ablation':        [56, 58,56,54,44,47,40,37,33,32, 59] ,  # 
-            'attn_act_sparsemax':   [69, 68, 67 ] # , 66
+            'bias_ablation':        [56, 58,56,] ,  #  54,44,47,40,37,33,32, 59
+            'attn_act_sparsemax':   [69, 68, 67 ], # , 66
+            'variant_layer_scale': [203,255],
+            'attn_variant_light':  [99]
 }
-
 
 
 
@@ -81,7 +81,6 @@ PRETRAINED_MODELS_URL = {
     'deit_tiny_patch16_224': 'finetuned_models/IMNET100/basic/best_checkpoint.pth'
 
 }
-
 
 
 

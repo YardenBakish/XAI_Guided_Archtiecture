@@ -483,6 +483,8 @@ def _sparsemax_threshold_and_support(X, dim=-1, k=None):
 
 
 
+
+#FIXME: acc results are good. consider implementing relprop based on Linear (positive and negative contributions)
 class SparsemaxFunction(Function):
     @classmethod
     def forward(cls, ctx, X, dim=-1, k=None):

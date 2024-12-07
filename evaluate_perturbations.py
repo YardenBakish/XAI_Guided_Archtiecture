@@ -1,3 +1,13 @@
+'''
+Wrapper Script
+To generate perutbations results we 
+(1) call for generate_visualizations, which generates a h5py file containing our data, 
+heatmap visualization and target label 
+
+(2) call for generate pertubations which loads the h5py file, and executes a basic perturbation experiment
+'''
+
+
 import os
 
 import argparse
@@ -8,7 +18,7 @@ import config
 
 def parse_args():
     parser = argparse.ArgumentParser(description='evaluate perturbations')
-    parser.add_argument('--pass-vis', action='store_true')
+    parser.add_argument('--pass-vis', action='store_true', help= "skip generating visualizations")
     parser.add_argument('--normalized-pert', type=int, default=1, choices = [0,1])
 
     parser.add_argument('--fract', type=float,
@@ -24,10 +34,8 @@ def parse_args():
                         required= True,
                         help='')
     
-    parser.add_argument('--ablated-component', type=str, 
-                        choices=['softmax', 'layerNorm', 'bias'],)
-    
-    
+
+        
     parser.add_argument('--variant', default = 'basic', help="")
     
     parser.add_argument('--output-dir', type=str,
@@ -103,7 +111,7 @@ if __name__ == "__main__":
     config.get_config(args, skip_further_testing = True)
 
     if 'work_env' not in args.work_env:
-       print("work_env must be included in your --work-env arg")
+       print("work_env term must be included in your --work-env arg")
        exit(1)
 
     run_gen_vis_cmd        = "python generate_visualizations.py"

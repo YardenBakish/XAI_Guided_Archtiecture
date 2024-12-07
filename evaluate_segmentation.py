@@ -20,7 +20,7 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 from ViT_explanation_generator import Baselines, LRP
-from model import deit_tiny_patch16_224 as vit_LRP
+from old.model import deit_tiny_patch16_224 as vit_LRP
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -149,7 +149,7 @@ test_img_trans = transforms.Compose([
 
 sizeX = int(args.input_size / args.eval_crop_ratio)
 
-transform2 = transforms.Compose([
+imagenet_trans = transforms.Compose([
         transforms.Resize(sizeX, interpolation=3),
         transforms.CenterCrop(args.input_size), 
         transforms.ToTensor(),
@@ -167,6 +167,8 @@ ds = Imagenet_Segmentation(args.imagenet_seg_path,
 dl = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=False)
 
 # Model
+
+#FIXME: currently only attribution method is tested. Add support for other methods using other variants 
 model = vit_LRP(pretrained=True).cuda()
 baselines = Baselines(model)
 
@@ -332,9 +334,6 @@ predictions, targets = [], []
 
 count = 0
 for batch_idx, (image, labels) in enumerate(iterator):
-
-
-    
 
     if args.method == "blur":
         images = (image[0].cuda(), image[1].cuda())

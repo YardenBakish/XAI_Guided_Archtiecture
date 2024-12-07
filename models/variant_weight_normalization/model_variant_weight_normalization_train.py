@@ -1,123 +1,17 @@
-import math
+
+
+""" Vision Transformer (ViT) in PyTorch
+Hacked together by / Copyright 2020 Ross Wightman
+""" 
 import torch
-import torch.nn.functional as F
-from torch import nn
-
-
-
-
+import torch.nn as nn
 from einops import rearrange
 from modules.layers_ours import *
 from baselines.ViT.weight_init import trunc_normal_
 from baselines.ViT.layer_helpers import to_2tuple
 from functools import partial
 import inspect
-
-def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """torch.repeat_interleave(x, dim=1, repeats=n_rep)"""
-    bs, n_kv_heads, slen, head_dim = x.shape
-    if n_rep == 1:
-        return x
-    return (
-        x[:, :, None, :, :]
-        .expand(bs, n_kv_heads, n_rep, slen, head_dim)
-        .reshape(bs, n_kv_heads * n_rep, slen, head_dim)
-    )
-
-def lambda_init_fn(depth):
-    return 0.8 - 0.6 * math.exp(-0.3 * depth)
-
-
-class MultiheadDiffAttn(nn.Module):
-    def __init__(
-    self, dim, num_heads=8, qkv_bias=False,attn_drop=0., proj_drop=0., 
-       
-                attn_activation = Softmax(dim=-1), 
-                isWithBias      = True
-    ):
-        super().__init__()
-      
-        self.dim = dim
-        
-        # arg num_heads set to half of Transformer's num_heads
-        self.num_heads = num_heads
-        
-        # arg decoder_kv_attention_heads set to half of Transformer's num_kv_heads if use GQA
-        # set to same as num_heads if use normal MHA
-        self.num_kv_heads = num_heads
-        self.n_rep = self.num_heads // self.num_kv_heads
-        
-        self.head_dim = dim // num_heads // 2
-        self.scaling = self.head_dim ** -0.5
-        
-        self.q_proj = nn.Linear(dim, dim, bias=False)
-        self.k_proj = nn.Linear(dim, dim // self.n_rep, bias=False)
-        self.v_proj = nn.Linear(dim, dim // self.n_rep, bias=False)
-        self.out_proj = nn.Linear(dim, dim, bias=False)
-        depth = 12
-        self.lambda_init = lambda_init_fn(depth)
-        self.lambda_q1 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_k1 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_q2 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-        self.lambda_k2 = nn.Parameter(torch.zeros(self.head_dim, dtype=torch.float32).normal_(mean=0,std=0.1))
-
-        self.subln = RMSNorm(2 * self.head_dim, eps=1e-5, elementwise_affine=True)
-    
-    def forward(
-        self,
-        x,
-        rel_pos,
-        attn_mask=None,
-    ):
-        bsz, tgt_len, embed_dim = x.size()
-        src_len = tgt_len
-
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
-
-        q = q.view(bsz, tgt_len, 2 * self.num_heads, self.head_dim)
-        k = k.view(bsz, src_len, 2 * self.num_kv_heads, self.head_dim)
-        v = v.view(bsz, src_len, self.num_kv_heads, 2 * self.head_dim)
-
-      
-
-        offset = src_len - tgt_len
-        q = q.transpose(1, 2)
-        k = repeat_kv(k.transpose(1, 2), self.n_rep)
-        v = repeat_kv(v.transpose(1, 2), self.n_rep)
-        q *= self.scaling
-        attn_weights = torch.matmul(q, k.transpose(-1, -2))
-        if attn_mask is None:
-            attn_mask = torch.triu(
-                torch.zeros([tgt_len, src_len])
-                .float()
-                .fill_(float("-inf"))
-                .type_as(attn_weights),
-                1 + offset,
-            )
-        attn_weights = torch.nan_to_num(attn_weights)
-        attn_weights += attn_mask   
-        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).type_as(
-            attn_weights
-        )
-
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1).float()).type_as(q)
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1).float()).type_as(q)
-        lambda_full = lambda_1 - lambda_2 + self.lambda_init
-        attn_weights = attn_weights.view(bsz, self.num_heads, 2, tgt_len, src_len)
-        attn_weights = attn_weights[:, :, 0] - lambda_full * attn_weights[:, :, 1]
-        
-        attn = torch.matmul(attn_weights, v)
-        attn = self.subln(attn)
-        attn = attn * (1 - self.lambda_init)
-        attn = attn.transpose(1, 2).reshape(bsz, tgt_len, self.num_heads * 2 * self.head_dim)
-
-        attn = self.out_proj(attn)
-        return attn
-    
-
-
+from torch.nn.utils.parametrizations import weight_norm
 
 
 
@@ -178,9 +72,9 @@ class Mlp(nn.Module):
         print(f"inside MLP with isWithBias: {isWithBias} and activation {activation}")
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = Linear(in_features, hidden_features, bias = isWithBias)
+        self.fc1 = weight_norm(Linear(in_features, hidden_features, bias = isWithBias), name='weight' ) 
         self.act = activation
-        self.fc2 = Linear(hidden_features, out_features, bias = isWithBias)
+        self.fc2 = weight_norm(Linear(hidden_features, out_features, bias = isWithBias), name='weight')
         self.drop = Dropout(drop)
 
     def forward(self, x):
@@ -199,6 +93,116 @@ class Mlp(nn.Module):
         return cam
 
 
+class Attention(nn.Module):
+    def __init__(self, dim, num_heads=8, qkv_bias=False,attn_drop=0., proj_drop=0., 
+       
+                attn_activation = Softmax(dim=-1), 
+                isWithBias      = True):
+        
+        super().__init__()
+
+        print(f"inside attention with activation : {attn_activation} | bias: {isWithBias} ")
+        self.num_heads = num_heads
+
+        head_dim = dim // num_heads
+        # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
+        self.scale = head_dim ** -0.5
+   
+
+        # A = Q*K^T
+        self.matmul1 = einsum('bhid,bhjd->bhij')
+        # attn = A*V
+        self.matmul2 = einsum('bhij,bhjd->bhid')
+
+        self.qkv = weight_norm(Linear(dim, dim * 3, bias=qkv_bias) , name='weight') 
+        self.attn_drop = Dropout(attn_drop)
+        self.proj = weight_norm(Linear(dim, dim, bias = isWithBias), name='weight') 
+        self.proj_drop = Dropout(proj_drop)
+        self.attn_activation = attn_activation
+
+        self.attn_cam = None
+        self.attn = None
+        self.v = None
+        self.v_cam = None
+        self.attn_gradients = None
+
+    def get_attn(self):
+        return self.attn
+
+    def save_attn(self, attn):
+        self.attn = attn
+
+    def save_attn_cam(self, cam):
+        self.attn_cam = cam
+
+    def get_attn_cam(self):
+        return self.attn_cam
+
+    def get_v(self):
+        return self.v
+
+    def save_v(self, v):
+        self.v = v
+
+    def save_v_cam(self, cam):
+        self.v_cam = cam
+
+    def get_v_cam(self):
+        return self.v_cam
+
+    def save_attn_gradients(self, attn_gradients):
+        self.attn_gradients = attn_gradients
+
+    def get_attn_gradients(self):
+        return self.attn_gradients
+
+    def forward(self, x):
+        b, n, _, h = *x.shape, self.num_heads
+        qkv = self.qkv(x)
+        q, k, v = rearrange(qkv, 'b n (qkv h d) -> qkv b h n d', qkv=3, h=h)
+
+        self.save_v(v)
+
+        dots = self.matmul1([q, k]) * self.scale
+       
+        attn = self.attn_activation(dots)
+        attn = self.attn_drop(attn)
+
+        self.save_attn(attn)
+        #attn.register_hook(self.save_attn_gradients)
+
+        out = self.matmul2([attn, v])
+        out = rearrange(out, 'b h n d -> b n (h d)')
+
+        out = self.proj(out)
+        out = self.proj_drop(out)
+        return out
+
+    def relprop(self, cam, **kwargs):
+        cam = self.proj_drop.relprop(cam, **kwargs)
+        cam = self.proj.relprop(cam, **kwargs)
+        cam = rearrange(cam, 'b n (h d) -> b h n d', h=self.num_heads)
+
+        # attn = A*V
+        (cam1, cam_v)= self.matmul2.relprop(cam, **kwargs)
+        cam1 /= 2
+        cam_v /= 2
+
+        self.save_v_cam(cam_v)
+        self.save_attn_cam(cam1)
+
+        cam1 = self.attn_drop.relprop(cam1, **kwargs)
+      
+        cam1 = self.attn_activation.relprop(cam1, **kwargs)
+
+        # A = Q*K^T
+        (cam_q, cam_k) = self.matmul1.relprop(cam1, **kwargs)
+        cam_q /= 2
+        cam_k /= 2
+
+        cam_qkv = rearrange([cam_q, cam_k, cam_v], 'qkv b h n d -> b n (qkv h d)', qkv=3, h=self.num_heads)
+
+        return self.qkv.relprop(cam_qkv, **kwargs)
 
 
 class Block(nn.Module):
@@ -212,7 +216,7 @@ class Block(nn.Module):
         print(f"Inside block with bias: {isWithBias} | norm : {layer_norm} | activation: {activation} | attn_activation: {attn_activation}  ")
 
         self.norm1 = safe_call(layer_norm, normalized_shape= dim, bias = isWithBias ) 
-        self.attn = MultiheadDiffAttn(
+        self.attn = Attention(
             dim, num_heads  = num_heads, 
             qkv_bias        = qkv_bias, 
             attn_drop       = attn_drop, 
@@ -329,8 +333,7 @@ class VisionTransformer(nn.Module):
             self.head = Mlp(embed_dim, int(embed_dim * mlp_ratio), num_classes, 0., isWithBias, activation)
         else:
             # with a single Linear layer as head, the param count within rounding of paper
-            self.head = Linear(embed_dim, num_classes, bias = isWithBias)
-
+            self.head = weight_norm(Linear(embed_dim, num_classes, bias = isWithBias), name='weight')
         # FIXME not quite sure what the proper weight init is supposed to be,
         # normal / trunc normal w/ std == .02 similar to other Bert like transformers
         trunc_normal_(self.pos_embed, std=.02)  # embeddings same as weights?

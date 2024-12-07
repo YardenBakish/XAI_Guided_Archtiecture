@@ -1,5 +1,5 @@
-from model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP_no_hooks
-from model_ablation import deit_tiny_patch16_224 as vit_LRP
+from old.model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP_no_hooks
+from old.model_ablation import deit_tiny_patch16_224 as vit_LRP
 from models.variant_relu.model_variant_relu_no_hooks import deit_tiny_patch16_224 as model_variant_relu_no_hooks
 from models.variant_relu.model_variant_relu import deit_tiny_patch16_224 as model_variant_relu
 from models.variant_batchnorm.model_variant_batchnorm_no_hooks import deit_tiny_patch16_224 as model_variant_batchnorm_no_hooks

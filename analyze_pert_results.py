@@ -21,6 +21,8 @@ def parse_args():
     parser.add_argument('--pass-vis', action='store_true')
     parser.add_argument('--gen-latex', action='store_true')
     parser.add_argument('--check-all', action='store_true')
+    parser.add_argument('--default-norm', action='store_true')
+
 
 
     parser.add_argument('--generate-plots', action='store_true', default=True)
@@ -114,11 +116,9 @@ def gen_latex_table(global_top_mapper,args):
    if args.normalized_pert == 0:
       ops   =   ["top_blur", "target_blur" ] + ops
 
-
    # Start the LaTeX table
-   
-  
-   latex_code = r'\begin{table}[h!]\centering' + '\n' + r'\begin{tabular}{|c|c|c|c|c|c|c|c|c|}' + '\n'
+ 
+   latex_code = r'\begin{table}[h!]\centering' + '\n' + r'\begin{tabular}{c c c c c| c c c c}' + '\n'
    latex_code += r'\hline' + '\n'
    
    header_row = ''
@@ -130,8 +130,6 @@ def gen_latex_table(global_top_mapper,args):
    
    b_values = ['neg_', 'pos_']
    c_values = ['top', 'target']
-
-
 
    x_values = ['Black']
    if args.normalized_pert == 0:
@@ -163,20 +161,17 @@ def gen_latex_table(global_top_mapper,args):
 
 
    latex_code = latex_code + header_row + subheader_row + subsubheader_row
-
-
    for experiment in global_top_mapper:
       row = experiment
       for a in a_values:
          for b in b_values:
             for c in c_values:
               
-               row += f' & {global_top_mapper[experiment][b+c+a]:.5f}'
+               row += f' & {100*global_top_mapper[experiment][b+c+a]:.3f}'
                print(row)
       row += r'\\ ' + '\n'
       latex_code += row
     
-   
    latex_code += "\\hline\n\\end{tabular}\n\\caption{Positive AUC}\n\\end{table}"
    print(latex_code)
    
@@ -309,7 +304,8 @@ def run_perturbations(args):
        if filter_epochs(args, int(epoch), variant ) == False:
           continue
        print(f"working on epoch {epoch}")
-       eval_pert_epoch_cmd = f"{eval_pert_cmd} --output-dir {model_dir}/pert_results/res_{epoch}"
+       pert_results_dir = 'pert_results/op_norm' if args.default_norm else 'pert_results'
+       eval_pert_epoch_cmd = f"{eval_pert_cmd} --output-dir {model_dir}/{pert_results_dir}/res_{epoch}"
        if args.normalized_pert == 0:
           eval_pert_epoch_cmd+="_base"
       
@@ -329,8 +325,9 @@ def run_perturbations(args):
 def generate_plots(dir_path,args):
     acc_results_path = os.path.join(dir_path, 'acc_results.json')
     acc_dict = parse_acc_results(acc_results_path)
-
-    pert_results_path = os.path.join(dir_path, 'pert_results')
+    pert_results_dir = 'pert_results/op_norm' if args.default_norm else 'pert_results'
+    
+    pert_results_path = os.path.join(dir_path, pert_results_dir)
     pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys(),args)
 
     # Sort the keys (x-axis)
@@ -401,7 +398,8 @@ def analyze(args):
        subdir = f'{root_dir}/{c}'
        acc_results_path = os.path.join(subdir, 'acc_results.json')
        acc_dict = parse_acc_results(acc_results_path)
-       pert_results_path = os.path.join(subdir, 'pert_results')
+       pert_results_dir = 'pert_results/op_norm' if args.default_norm else 'pert_results'
+       pert_results_path = os.path.join(subdir, pert_results_dir)
        pos_dict, neg_dict, pos_lists, neg_lists = parse_pert_results(pert_results_path, acc_dict.keys(),args, op)
        tmp_max_neg         = -float('inf')
        exp = parse_subdir(subdir)
@@ -461,8 +459,6 @@ def analyze(args):
        pos_value, neg_value, subdir, key, acc = pos_list[i]
        print(f"{i+1}. experiment: {parse_subdir(subdir)} | Iter: {key} | POS AUC: {pos_value} | Neg AUC: {neg_value} | ACC1: {acc}")
 
-   
-
 
       if args.generate_plots:
          x_values = np.arange(0.1, 1.0, 0.1)
@@ -474,6 +470,9 @@ def analyze(args):
    
    if args.gen_latex:
       gen_latex_table(global_top_mapper,args)
+
+
+
 
 if __name__ == "__main__":
     args                   = parse_args()

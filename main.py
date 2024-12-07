@@ -8,7 +8,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import json
 import wandb
-from model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP
+from old.model_no_hooks_ablation import deit_tiny_patch16_224 as vit_LRP
 from models.model_handler import model_env 
 
 
@@ -37,13 +37,11 @@ import config
 
 def get_args_parser():
     parser = argparse.ArgumentParser('DeiT training and evaluation script', add_help=False)
-    
+    # monitoring arguments
     parser.add_argument('--name', default=None, type=str, help='run name')
     parser.add_argument('--project', default='', type=str, help='project name')
-    parser.add_argument('--ablated-component', type=str,
-                        default='none',
-                        choices=['none', 'softmax', 'layerNorm', 'bias'],)
-    
+
+    # experiment arguments
     parser.add_argument('--auto-start-train', action='store_true')
     parser.add_argument('--backup-interval', type=int,
                         default=3,)
@@ -51,7 +49,6 @@ def get_args_parser():
     parser.add_argument('--results-dir',type=str)
     parser.add_argument('--auto-resume',action='store_true',)
     parser.add_argument('--auto-save',action='store_true',)
-    parser.add_argument('--is-ablation',action='store_true',)
     parser.add_argument('--variant', default ='basic',  type=str, help="")
 
 
@@ -217,19 +214,10 @@ def get_args_parser():
 
 def main(args):
     
+    #setup
     config.get_config(args)
+    exp_name      = args.variant
 
-
-    if args.is_ablation and args.variant:
-        print(args.variant)
-        print("does not support both a variant and ablation")
-        exit(1)
-
-    exp_name      = args.ablated_component
-    if args.variant:
-        exp_name = args.variant
-    if args.is_ablation:
-        exp_name = "no_"+exp_name
 
     exp_name = f'{args.data_set}/{exp_name}' 
     if args.auto_save:
@@ -247,7 +235,7 @@ def main(args):
             args.resume     = last_check_point
             args.finetune   = last_check_point
     
-    
+    #wandb
     if args.project != '':
         if args.verbose:
             print("initiatin wan")
@@ -260,7 +248,7 @@ def main(args):
 
 
 
-    print("changehere")
+    #FIXME: currently have limited access to gpu. Change later
     #utils.init_distributed_mode(args)
     args.distributed = False
     print(args)
@@ -281,9 +269,7 @@ def main(args):
     dataset_val, args.nb_classes = build_dataset(is_train=False, args=args)
     
   
-    
-    if args.verbose:
-        print("CHANGEHERE: Itamar set distributed as True")
+    #FIXME: currently have limited access to gpu (UNIFIED paper set it to true by default). fix later
   
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -316,6 +302,7 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=True,
     )
+    
     if args.verbose:
         print("Training Dataset built successfully")
 
@@ -343,7 +330,10 @@ def main(args):
             prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
-    print(f"Creating model: {args.model}")
+    if args.verbose:
+        print(f"Creating model: {args.model}")
+
+
     '''model = vit_LRP(
         pretrained=False,
         num_classes=args.nb_classes,
@@ -365,9 +355,9 @@ def main(args):
         img_size=args.input_size,
     )'''
     
-    model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
-    #if args.nb_classes == 100:
-    #    model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
+    #FIXME: currently hardcoded, might change we additional datasets are included
+    if args.nb_classes == 100:
+        model.head = torch.nn.Linear(model.head.weight.shape[1],args.nb_classes)
 
                     
     if args.finetune:
@@ -387,7 +377,7 @@ def main(args):
                 del checkpoint_model[k]
 
         
-        if args.ablated_component == "bias":
+        if args.variant == "bias_ablation":
             for key in checkpoint_model.copy():
                 if "bias" in key:
                     if key not in state_dict:
@@ -408,15 +398,6 @@ def main(args):
         extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
         # only the position tokens are interpolated
         pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
-        
-        
-        print(pos_embed_checkpoint.shape)
-        print("\n\n")
-        print(pos_tokens.shape)
-        print("\n\n")
-        print(orig_size)
-        print("\n\n")
-        print(embedding_size)
         
         
         pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
@@ -500,7 +481,7 @@ def main(args):
     if args.distillation_type != 'none':
         assert args.teacher_path, 'need to specify teacher-path when using distillation'
         print(f"Creating teacher model: {args.teacher_model}")
-        print("CHANGEHERE: Itamar put 8 patches here")
+        #
         teacher_model = create_model(
             args.teacher_model,
             pretrained=False,
@@ -524,8 +505,6 @@ def main(args):
 
     output_dir = Path(args.output_dir)
     if args.resume:
-       #changehere - it should work now
-       #model = vit_LRP(pretrained=True).cuda()
        if args.resume.startswith('https'):
             checkpoint = torch.hub.load_state_dict_from_url(
                 args.resume, map_location='cpu', check_hash=True)
@@ -547,8 +526,6 @@ def main(args):
        lr_scheduler.step(args.start_epoch)
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
-        #update_json(f'{args.output_dir}/last_acc_results.json', {f"1_acc": f"* Acc@1 {test_stats['acc1']:.1f} Acc@5 {test_stats['acc5']:.1f} loss {test_stats['loss']:.1f}"})
-
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         return
     
@@ -573,7 +550,7 @@ def main(args):
             set_training_mode=args.train_mode,  # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
             args = args,
         )
-        print("managed to finsh training")
+        print("managed to finish training for one epoch")
 
         lr_scheduler.step(epoch)
         if args.output_dir and (epoch %args.backup_interval == 0):

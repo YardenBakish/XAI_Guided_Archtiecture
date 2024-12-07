@@ -1,19 +1,5 @@
-'''
-Flow:
- (1) update model components based on variant and load weighted model
- (2) load dataset:
-    (a) if args.normalized_pert, we load the dataset with normalization
-    (b) else, we load dataset with resizing only
- (3) compute saliency:
-    (a) we create h5py file storing our original data, heatmap visualization and target label
-    Note: Notice that if args.normalized_pert==1, we save NORMALIZED INPUT (mistake)
-    (b) we traverse our sampler and normalize the data
-    Note: again, the data might have been normalized for a second time
-    Note 2: two normalizations were tested, one aligned with imagenet, and another standard one.
-    The results turn out to be very different (for discussion)
-    (c) we choose our method (always transformer attribution) and generate LRP for our predicted class
-
-'''
+# THIS VERSION WAS TESTED (located at norm_op dirs)
+# to test whether altogather the results for perturbations are better this way
 
 
 import os
@@ -25,13 +11,13 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 # Import saliency methods and models
 from baselines.ViT.misc_functions import *
-
-from ViT_explanation_generator import Baselines, LRP
-from old.model_ablation import deit_tiny_patch16_224 as vit_LRP
-
 #from dataset.label_index_corrector  import *
+from ViT_explanation_generator import Baselines, LRP
+from model_ablation import deit_tiny_patch16_224 as vit_LRP
 
 
+
+#from models.model_wrapper import model_env 
 from models.model_handler import model_env 
 
 
@@ -53,7 +39,7 @@ def normalize(tensor,
     return tensor
 
 
-imagenet_normalize = transforms.Compose([
+noramlize2 = transforms.Compose([
     #transforms.Resize(256, interpolation=3),
     #transforms.CenterCrop(224),
     transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)
@@ -87,7 +73,9 @@ def compute_saliency_and_save(args):
         
         for batch_idx, (data, target) in enumerate(tqdm(sample_loader)):
             
- 
+            
+            
+            
             if first:
                  first = False
                  data_cam.resize(data_cam.shape[0] + data.shape[0] - 1, axis=0)
@@ -107,7 +95,7 @@ def compute_saliency_and_save(args):
             if args.normalized_pert:
                 data = normalize(data)
             else:
-                data = imagenet_normalize(data)
+                data = normalize(data)
 
             data = data.to(device)
             data.requires_grad_()
@@ -127,9 +115,13 @@ def compute_saliency_and_save(args):
                 # Res = Res - Res.mean()
 
             elif args.method == 'transformer_attribution':
+                #print(model_LRP(data).shape)
+          
+
+                print("attribution")
                 output = model_LRP(data)
-                #print(f"target: {target}")
-                #print(f"predicted:  {output.data.topk(5, dim=1)[1][0].tolist() }")
+                print(f"target: {target}")
+                print(f"predicted:  {output.data.topk(5, dim=1)[1][0].tolist() }")
                 if output.data.topk(5, dim=1)[1][0].tolist()[0] == target:
                     count_correct+=1 
                 Res = lrp.generate_LRP(data, start_layer=1, method="grad", index=index).reshape(data.shape[0], 1, 14, 14)
@@ -272,7 +264,6 @@ if __name__ == "__main__":
     device = torch.device("cuda" if cuda else "cpu")
 
     # Model
-    #FIXME: currently only attribution method is tested. Add support for other methods using other variants 
     model = vit_LRP(pretrained=True).cuda()
     baselines = Baselines(model)
 
@@ -283,6 +274,14 @@ if __name__ == "__main__":
         else:
             args.nb_classes = 1000
     
+       
+        '''model_LRP = model_env(pretrained=False, 
+                      nb_classes=args.nb_classes,  
+                      ablated_component= args.ablated_component,
+                      variant = args.variant,
+                      hooks = True,
+                    )'''
+        
         model_LRP = model_env(pretrained=False, 
                       args = args,
                       hooks = True,
@@ -303,13 +302,11 @@ if __name__ == "__main__":
     ''' model_orig_LRP = vit_orig_LRP(pretrained=True).cuda()
     model_orig_LRP.eval()
     orig_lrp = LRP(model_orig_LRP)'''
-
     size = int(args.input_size / args.eval_crop_ratio) 
     # Dataset loader for sample images
 
     transform = transforms.Compose([
-        transforms.Resize(size, interpolation=3),
-        transforms.CenterCrop(args.input_size), 
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
     ])
 
@@ -320,15 +317,17 @@ if __name__ == "__main__":
         if args.data_set == 'IMNET':
             root = os.path.join(args.data_path,  'val')
             dataset_val = datasets.ImageFolder(root, transform=transform)
+            nb_classes = 1000
 
         elif args.data_set == 'IMNET100':
             root = os.path.join(args.data_path,  'val')
             dataset_val = datasets.ImageFolder(root, transform=transform)
+            nb_classes = 100
 
     
    
 
-   
+    #random 0.4
     np.random.seed(42)
     total_size  = len(dataset_val)
     indices = list(range(total_size))
@@ -342,6 +341,7 @@ if __name__ == "__main__":
     indices     = list(range(subset_size))
     dataset_val = Subset(dataset_val, indices)'''
 
+    #print(subset.indices)
     #sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     #imagenet_ds = ImageNet(args.imagenet_validation_path, split='val', download=False, transform=transform)
@@ -356,4 +356,3 @@ if __name__ == "__main__":
     )
 
     compute_saliency_and_save(args)
-

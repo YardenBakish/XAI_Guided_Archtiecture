@@ -1,3 +1,15 @@
+'''
+Flow:
+ (1) load model and h5py file from 'generate_visualizations'
+ (2) eval:
+    (a) initialize two matrices : correctence_target_precentage, correctence_top_precentage
+    (b)  we save our target label and initial predicted label and iterate through our loader,
+        (b.1) we each time take the topk most/least important pixels and mask them
+        (b.2) pass our data through the model and check if prediction equals initial prediction/ target
+    (c) calculate mean over the samples for each step, and then calculate AUC
+ (3) repeat again for blur experiment
+'''
+
 import torch
 import os
 from tqdm import tqdm
@@ -8,7 +20,7 @@ from misc.helper_functions import *
 from sklearn.metrics import auc
 from torchvision.transforms import GaussianBlur
 
-from model_ablation import deit_tiny_patch16_224 as vit_LRP
+from old.model_ablation import deit_tiny_patch16_224 as vit_LRP
 
 #from models.model_wrapper import model_env 
 from models.model_handler import model_env 
@@ -35,18 +47,12 @@ def normalize(tensor,
 
 def calc_auc(perturbation_steps,matt,op):
     means = []
-    
-    # Iterate through each row of the matrix
     for row in matt:
-        # Mask negative values and only keep non-negative values
         non_negative_values = row[row >= 0]
-        
-        # Compute the mean of non-negative values if any exist
         if non_negative_values.size > 0:
             row_mean = np.mean(non_negative_values)
         else:
-            # If all values in the row are negative, return NaN or another suitable value
-            row_mean = np.nan  # or use 0 or some other placeholder if you prefer
+            row_mean = np.nan  
         
         means.append(row_mean)
     auc_score = auc(perturbation_steps, means)
@@ -85,7 +91,7 @@ def eval(args, mode = None):
  
     for batch_idx, (data, vis, target) in enumerate(tqdm(sample_loader)):
         
-        print(f"\n\n REAL TARGET : {target}")
+        #print(f"\n\n REAL TARGET : {target}")
         if args.debug :
           if last_label == None or last_label != target:
               last_label   = target
@@ -108,7 +114,7 @@ def eval(args, mode = None):
         pred_org_logit     = pred.data.max(1, keepdim=True)[0].squeeze(1)
         pred_org_prob      = pred_probabilities.data.max(1, keepdim=True)[0].squeeze(1)
         pred_class         = pred.data.max(1, keepdim=True)[1].squeeze(1)
-        print(f"PREDICTED CLASS (NO CHANGES) : {pred_class}")
+        #print(f"PREDICTED CLASS (NO CHANGES) : {pred_class}")
         
         tgt_pred           = (target == pred_class).type(target.type()).data.cpu().numpy()
         num_correct_model[model_index:model_index+len(tgt_pred)] = tgt_pred
@@ -244,6 +250,11 @@ def eval(args, mode = None):
     #print(np.mean(dissimilarity_pertub, axis=1), np.std(dissimilarity_pertub, axis=1))
 
 
+
+
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a segmentation')
     parser.add_argument('--batch-size', type=int,
@@ -262,14 +273,9 @@ if __name__ == "__main__":
                         help='')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
     parser.add_argument('--eval-crop-ratio', default=0.875, type=float, help="Crop ratio for evaluation")
-    parser.add_argument('--custom-trained-model', type=str,
-                   
-                        help='')
+    parser.add_argument('--custom-trained-model', type=str,help='')
     
-    parser.add_argument('--ablated-component', type=str,
-                        choices=['softmax', 'layerNorm', 'bias'],)
-    
-    
+
     parser.add_argument('--variant', default = 'basic', help="")
     
     parser.add_argument('--data-set', default='IMNET100', choices=['IMNET100','CIFAR', 'IMNET', 'INAT', 'INAT19'],
@@ -306,9 +312,7 @@ if __name__ == "__main__":
                         help='')
     
 
-    parser.add_argument('--data-path', type=str,
-                     
-                        help='')
+    parser.add_argument('--data-path', type=str, help='')
     args = parser.parse_args()
 
 
@@ -381,6 +385,7 @@ if __name__ == "__main__":
         model.load_state_dict(checkpoint['model'], strict=False)
         model.to(device)
     else:
+        #FIXME: currently only attribution method is tested. Add support for other methods using other variants 
         model = vit_LRP(pretrained=True).cuda()
   
     model.eval()
@@ -396,6 +401,7 @@ if __name__ == "__main__":
 
     eval(args)
     
+    #if we do not use normalized pert we run a second run for blur
     if args.normalized_pert == 0:
         eval(args, "blur")
 
